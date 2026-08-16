@@ -1,0 +1,34 @@
+# environment / secrets — anything credential-shaped stays out of history
+.env
+.env.*
+!.env.example
+*.session
+*.session-journal
+*secret*
+*credential*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
+# NOTE: solclear's .gitignore used bare `*key*` and `*token*` globs. Those are
+# wrong for this repository — "token" is a domain word here (Solana tokens) and
+# would silently untrack real source files. Credential leaks are instead caught
+# by tests/test_honesty.py, which scans every tracked file for credential-shaped
+# strings. A test that breaks the build beats a filename glob that guesses.
+
+# collected data: raw rows are machine-local and large. Committed digests live
+# in docs/digests/ instead (counts + manifest sha256, never raw rows).
+data/manifests/
+data/attention/
+data/outcomes/
+data/vendor/
+data/state/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
