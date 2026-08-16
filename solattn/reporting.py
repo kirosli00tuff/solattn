@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from solattn import jsonl, registry
-from solattn.clock import Clock, iso
+from solattn.clock import Clock, day_str, iso, utc_date
 from solattn.config import Settings
 from solattn.matching.daily import daily_counts
 from solattn.universe import manifest
@@ -23,13 +23,16 @@ DIGEST_DIR = Path("docs/digests")
 
 def build_digest(settings: Settings, clock: Clock, day: str) -> dict[str, Any]:
     """Assemble one UTC day's digest."""
-    counts = manifest.day_counts(settings.manifests_dir(), day)
+    # A closed day is judged on its count; an open one on the measured rate.
+    complete = day < day_str(utc_date(clock.now()))
+    counts = manifest.day_counts(settings.manifests_dir(), day, day_is_complete=complete)
     seal = manifest.seal_day(settings.manifests_dir(), day, iso(clock.now()))
     tallies = [t.to_row() for t in daily_counts(settings, day)]
     ledger_rows = jsonl.read(settings.vendor_dir() / "requests.jsonl")
     requests_today = sum(int(r.get("count", 0)) for r in ledger_rows if r.get("day") == day)
     return {
         "day": day,
+        "day_is_complete": complete,
         "schema": registry.SCHEMA_VERSION,
         "generated_at": iso(clock.now()),
         "enumeration": counts,

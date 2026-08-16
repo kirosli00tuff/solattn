@@ -11,9 +11,14 @@ watcher processes appending concurrently cannot lose a birth to a race.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from solattn import jsonl, registry
 from solattn.records import PoolBirth
+
+#: Below these, a rate cannot be measured honestly and the check reports so.
+MIN_RATE_SAMPLE = 20
+MIN_RATE_SPAN_SECONDS = 600.0
 
 
 def manifest_path(root: Path, day: str) -> Path:
@@ -51,24 +56,65 @@ def read_recent(root: Path, days: list[str]) -> list[PoolBirth]:
     return out
 
 
-def day_counts(root: Path, day: str) -> dict[str, int]:
-    """Per-venue-class counts for a birth day, plus the registered rate check."""
+def observed_rate_per_day(births: list[PoolBirth]) -> float | None:
+    """Births per day, measured over the span the births themselves cover.
+
+    Returns None when the span is too short to extrapolate from. The
+    registration compares a **rate** against ~1,330/day and trips saturation on
+    a **rate**, so a partial day must be measured as a rate — comparing a
+    part-day *count* against a full-day expectation would report a disagreement
+    every morning and none of them would mean anything.
+    """
+    if len(births) < MIN_RATE_SAMPLE:
+        return None
+    stamps = sorted(b.pool_created_at for b in births)
+    from solattn.clock import parse_iso
+
+    span_s = (parse_iso(stamps[-1]) - parse_iso(stamps[0])).total_seconds()
+    if span_s < MIN_RATE_SPAN_SECONDS:
+        return None
+    # n births span n-1 intervals; using n would overstate the rate on small n.
+    return (len(births) - 1) / span_s * 86_400
+
+
+def day_counts(root: Path, day: str, day_is_complete: bool = False) -> dict[str, Any]:
+    """Per-venue-class counts for a birth day, plus the registered rate checks.
+
+    ``basis`` records which quantity the disagreement was judged on: the day's
+    full ``count`` once the day is closed, or the measured ``rate`` while it is
+    still open. A day with too few births to measure a rate reports
+    ``basis="insufficient"`` and asserts nothing — an undecidable check must
+    say so rather than defaulting to "fine".
+    """
     births = read_day(root, day)
-    amm = sum(1 for b in births if b.venue_class == registry.VENUE_CLASS_AMM)
-    launchpad = len(births) - amm
+    amm_births = [b for b in births if b.venue_class == registry.VENUE_CLASS_AMM]
+    amm = len(amm_births)
     expected = registry.EXPECTED_AMM_POOLS_PER_DAY
-    ratio = (amm / expected) if expected else 0.0
+    rate = observed_rate_per_day(amm_births)
+
+    if day_is_complete:
+        basis, measured = "count", float(amm)
+    elif rate is not None:
+        basis, measured = "rate", rate
+    else:
+        basis, measured = "insufficient", 0.0
+
+    ratio = (measured / expected) if (expected and basis != "insufficient") else 0.0
+    disagreement = basis != "insufficient" and (
+        ratio > registry.RATE_DISAGREEMENT_FACTOR or ratio < 1 / registry.RATE_DISAGREEMENT_FACTOR
+    )
+    saturated = basis != "insufficient" and measured > registry.SATURATION_AMM_PER_DAY
+
     return {
         "total": len(births),
         "amm": amm,
-        "launchpad": launchpad,
+        "launchpad": len(births) - amm,
         "expected_amm": expected,
-        "amm_vs_expected_pct": int(ratio * 100),
-        "disagreement": int(
-            ratio > registry.RATE_DISAGREEMENT_FACTOR
-            or ratio < 1 / registry.RATE_DISAGREEMENT_FACTOR
-        ),
-        "saturated": int(amm > registry.SATURATION_AMM_PER_DAY),
+        "basis": basis,
+        "measured_amm_per_day": round(measured, 1),
+        "amm_vs_expected_ratio": round(ratio, 2),
+        "disagreement": int(disagreement),
+        "saturated": int(saturated),
     }
 
 

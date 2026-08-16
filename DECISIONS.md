@@ -183,3 +183,95 @@ so this measures *visible* attention on a fixed instrument, which is exactly
 what it claims. If the directory is unreachable on the registration date, the
 Telegram source does not start collecting until the list is fixed; a
 provisional list that gets "improved" later is worse than a late start.
+
+## ADR-008: Source verification includes a freshness bar, because reachability is not liveness
+
+**Date:** 2026-08-16 · **Status:** accepted · measured in Task 2
+
+**Context.** The Task 2 verification of Farcaster probed six public hubs. One,
+`hub.pinata.cloud`, answered `GET /v1/info` with **HTTP 200 and an
+823,527,781-message db-stats payload** — every signal a reachability check
+looks for. Its newest event was **238 days old**. A reachability-only check
+would have accepted it, the collector would have polled a dead hub forever, and
+this project would have recorded **zero Farcaster attention on every cohort
+while believing the source was working**. That failure is silent, permanent in
+a forward-recorded cohort, and indistinguishable in the data from "nobody
+mentioned these tokens on Farcaster" — which is a *result* this study might
+otherwise have reported.
+
+**Decision.** A source verifies only if it is **reachable AND fresh**. For
+Farcaster, freshness is measured directly: seed each shard at
+`(maxHeight − 300) << 14` (the event-id encoding, measured not documented),
+read the newest dated cast, and fail the hub if its tip is older than
+`MAX_TIP_AGE_SECONDS` (3600). The probe order runs until a hub passes **both**
+bars; every rejected candidate is recorded with its measured reason in
+`docs/ACCESS.md`. The hub that passed, `snap.farcaster.xyz:3381`, measured a
+tip age of 5–11 seconds.
+
+**Consequences.** Verification costs more requests than a liveness ping, which
+is the correct trade for a project whose whole output is a measurement. The
+principle generalizes past Farcaster and is now the standard for any source
+added later: **a source that returns data is not thereby serving current data**,
+and for a forward-recorded study only current data exists.
+
+## ADR-009: The registered rate and saturation checks are judged on a measured rate, and an undecidable check says so
+
+**Date:** 2026-08-16 · **Status:** accepted · corrects an implementation, not the registration
+
+**Context.** REGISTRATION.md 1 compares "the observed `amm` birth rate" against
+~1,330/day, and section 7 trips saturation when "the measured `amm` birth rate
+exceeds 2,400/day". Both are **rates**. The first implementation compared the
+day's count-so-far against a full-day expectation, which would have reported a
+disagreement every morning (a partial day always undershoots a full-day
+figure), and could not trip saturation until a day was nearly over — by which
+point the capacity it protects has already been spent.
+
+**Decision.** Both checks are computed from a rate measured over the span the
+births themselves cover, using `(n − 1) / span` so a small sample is not
+overstated by the endpoint. A day with fewer than 20 births or a span under 10
+minutes reports **`basis="insufficient"` and asserts nothing** — an undecidable
+check must say so rather than defaulting to agreement, which is the same
+fail-closed rule the refusal semantics follow everywhere else. A **closed** day
+is judged on its count, and the digest records which basis was used.
+
+**Consequences.** The check is honest on a partial day and can fire early
+enough to matter. No registered number changed; this makes the code compute
+what the registration already said.
+
+## ADR-010: The observed birth rate disagrees with the registered expectation by ~6x — reported, not reconciled
+
+**Date:** 2026-08-16 · **Status:** accepted · the registered check fired on its first day
+
+**Context.** The registration fixed an expected ~1,330 `amm` pools/day from
+solclear's Stage B addendum (measured 2026-08-13, n = 122) and registered that
+**a disagreement of more than 2× is reported as a disagreement and never
+averaged away**. First measurement, 2026-08-16T16:26–16:46Z: **443 unique pools
+enumerated, 95 tagged `amm`, over a 17-minute span → a measured rate of ~7,877
+`amm` pools/day, 5.92× the registered expectation.** The full-feed rate,
+~37,000/day, is 4.1× solclear's ~9,000/day and 2.7× its newest−oldest variant
+(~14,000/day). The `amm` share also moved: **21–24% observed against solclear's
+14.8%** (18 of 122).
+
+**Decision.** The disagreement is **reported with its span and its n, and is
+not reconciled, averaged, or used to edit anything.** Candidate causes are
+named without picking one: (a) genuine venue-mix and activity shift in the
+three days since solclear measured; (b) a methodological difference — solclear's
+headline used `N ÷ (retrieval time − oldest pool_created_at)`, which includes
+retrieval lag and biases *down*, while this measures newest−oldest; (c) a dex id
+absent from the launch-venue denylist misclassifying a bonding curve as `amm`.
+**The denylist is not edited to make the number agree** (REGISTRATION.md 9:
+editing it mid-collection voids the registration). The authoritative check is
+the first **complete** UTC day, judged on its count.
+
+**Consequences, and this one needs an operator decision.** The registered
+capacity plan does not fit the observed rate. At ~7,900 `amm` births/day,
+outcome checkpoints need **~15,800 requests/day against a 14,400/day measured
+capacity and a 10,000/day registered cap** — the arithmetic REGISTRATION.md 7
+performed at ~1,330/day no longer closes. The registered saturation rule fired
+and the watcher recorded it (three markers by 16:46Z). **It does not silently
+sample and it does not silently drop**, so outcome coverage will simply refuse
+at the cap until the operator decides between: raising the cap and re-measuring
+whether a faster pace holds; amending the universe to a narrower registered
+sub-cohort, which starts a new cohort; or accepting a registered, stated
+sampling rule, which also starts a new cohort. **No option may be taken
+silently, and this session takes none of them.**
