@@ -627,3 +627,103 @@ absence of one. What the amendment buys is that the bias is **fixed in advance,
 mechanically reproducible from a recorded query set and date, and immune to
 being adjusted once results are visible.** That was always the property §7 was
 protecting, and it is preserved.
+
+### Amendment 2 — 2026-08-17 — the attention metric is computed and reported PER SOURCE
+
+**What data existed when this amendment was made.** Attention rows existed for
+all three sources (telegram 65, bluesky 6,725, farcaster 1,174 persisted at the
+time of writing) and are characterised below. **No outcome existed and none was
+looked at.** The first cohort matures 2026-08-26 and the first outcome
+checkpoint fires the same day; `data/outcomes/` was empty and
+`data/state/checkpoints.jsonl` recorded `pools_due 0` at its only run. This
+amendment therefore fixes an open **analysis** choice strictly before any
+forward return could inform it, which is the ordering §4 exists to protect.
+
+**Nothing collected changes.** The channel list stays fixed under §7's
+never-edit rule — Telegram has collected since 2026-08-17T04:28Z, so the list
+is frozen regardless of what the characterisation below shows. The matching
+rules, the attention metric definitions, the windows, the horizons, the death
+floor, the cost band and the kill criteria are all untouched. **This amendment
+changes only how the metric is partitioned for reporting, and the trial count
+that follows from it.**
+
+**The characterisation, mechanical, proxies stated before computing.** No
+channel was classified by hand or by judgment. P1 = rows ÷ distinct authors;
+P2 = share of a source's rows from its single most active author id; P3 = share
+of sampled messages with ≥ 3 distinct cashtags **or** with
+(cashtag + mint-address characters) ÷ total characters > 0.30, computed with the
+registered filter's own regexes on a fresh bounded sample (raw text is
+deliberately not persisted); P4 = persisted `match_kind` distribution.
+
+| | telegram | bluesky | farcaster |
+|---|---|---|---|
+| rows (persisted, 2 days) | 65 | 6,725 | 1,174 |
+| distinct authors | **4** | **3,077** | 410 |
+| P1 rows/author | **16.25** | **2.19** | 2.86 |
+| P2 top-author share | 0.308 | 0.050 | 0.273 |
+| channels producing rows | 4 of 20 | 1 (firehose) | 1 (hub) |
+| P3 dominance share | **0.153** (n = 680) | 0.111 (n = 18) | 0.286 (n = 7) |
+| P4 ambiguous | **0.831** | 0.240 | 0.205 |
+| P4 unmatched | **0.031** | 0.487 | 0.541 |
+| P4 mint-exact | 0.000 | 0.001 | 0.000 |
+
+**P3 is reported only for Telegram.** The Bluesky and Farcaster samples (n = 18
+and n = 7 messages passing the ingest filter in the sampling window) are too
+small to distinguish any share, and their figures above are recorded for
+completeness, **not** as measurements. A share with n = 7 is not a result.
+
+**What the numbers say, descriptively.** Two contrasts do not depend on the
+weak proxy. **Telegram emits 16.25 rows per author from 4 distinct authors,
+against Bluesky's 2.19 from 3,077** — a source whose metric aggregates a
+handful of emitters versus one aggregating thousands. And **Telegram's
+unmatched share is 0.031 against Bluesky's 0.487**: almost everything Telegram
+emits matches the token vocabulary, which is the signature of a feed that emits
+token names by construction rather than of people who sometimes mention them.
+This is a factual description of what each source emits. It is **not** a
+quality ranking, and no source is dropped, down-weighted, or preferred in
+collection because of it.
+
+**The decision.**
+
+1. **The primary attention metric is computed per source and reported per
+   source.** A pooled figure treats three structurally different constructs as
+   one; the counts above are what "structurally different" means concretely.
+2. **A pooled series IS reported, as a registered SECONDARY, never primary.**
+   Suppressing it would hide a comparison a reader will reasonably want, and
+   the cost of carrying it is one more series in a grid that is counted and
+   deflated anyway. It is labelled `pooled` and may never be quoted as the
+   headline.
+3. **The designated primary trial becomes
+   `(h = 7d, statistic = v24, match set = mint-exact, series = bluesky)`.**
+   Bluesky carries it on the mechanical ground recorded above: it is the only
+   series whose metric aggregates many independent emitters rather than a few
+   (3,077 authors at 2.19 rows each; top-author share 0.050). This designation
+   is made **before any outcome was observed** and is fixed from here.
+4. **The trial grid grows and the deflation grows with it.**
+   **horizons {1, 3, 7, 30} × statistics {v24, v1, v6, ua24, accel} ×
+   match sets {mint-exact, mint+cashtag} × series {bluesky, farcaster,
+   telegram, pooled} = 4 × 5 × 2 × 4 = 160 trials.** All 160 are reported. The
+   one primary trial is read at α = 0.05; the other 159 are judged against the
+   Šidák-adjusted level **α_adj = 1 − (1 − 0.05)^(1/160) = 0.000321**. The grid
+   **may not grow further** — a series, statistic, horizon or match set not
+   listed here requires another amendment and a new cohort.
+
+**The Telegram construct is described in every result.** Any table, figure or
+sentence reporting a Telegram attention number carries the description
+**"alert-feed-dominated"** with the Task 1 numbers attached (4 distinct
+authors, 16.25 rows/author, 0.831 ambiguous, 4 of 20 channels producing). No
+reader may mistake it for community attention, and no result may quote a
+Telegram figure bare.
+
+**The under-detection direction, stated now rather than in the discussion
+later.** The Telegram instrument is narrow and alert-feed-dominated: a fixed
+20-channel list of which 4 produced rows, 4 distinct authors, and a message mix
+that names tokens by construction. Such an instrument **under-samples genuine
+community attention**, and under-sampling the predictor **biases the measured
+association toward the null**. Therefore: **a negative result on the Telegram
+series — and on any pooled series containing it — carries an under-detection
+caveat and must not be read as evidence that attention does not predict
+outcomes; and a positive result is not inflated by this weakness, since the
+bias runs the other way.** This sentence is registered here, before any
+outcome, so it cannot be produced afterwards as a rationalisation of whichever
+result appears.

@@ -313,3 +313,49 @@ message read) was considered and rejected: Telethon batches history into one
 request per 100 messages, so per-message charges would meter a quantity that
 does not correspond to outbound requests, and the registration's ledger counts
 requests.
+
+## ADR-012: The attention metric is partitioned by source; pooled is secondary, never primary
+
+**Date:** 2026-08-17 · **Status:** accepted · implements REGISTRATION.md Amendment 2
+
+**Context.** The resolved Telegram channels that produced rows in the first
+window are automated trending-alert feeds rather than discussion communities.
+Measured mechanically, before any outcome existed and with the proxies stated
+before they were computed: **Telegram emits 16.25 rows per author from 4
+distinct authors; Bluesky 2.19 from 3,077.** Telegram's unmatched share is
+**0.031** against Bluesky's **0.487** — nearly everything Telegram emits matches
+the token vocabulary, the signature of a feed that names tokens by construction
+rather than of people who sometimes mention them. Its ambiguous share is
+**0.831**. A single pooled attention number would sum three quantities that are
+not the same quantity, and the sum would be dominated by whichever source
+happened to emit most rows, which is a property of the instruments rather than
+of attention.
+
+**Decision.** The primary attention metric is **computed and reported per
+source**. A **pooled** series is reported as a registered **secondary** and may
+never be quoted as a headline — reported rather than suppressed, because hiding
+the comparison would be its own distortion, and it costs one series in a grid
+that is counted and deflated regardless. The designated primary trial becomes
+`(7d, v24, mint-exact, bluesky)`: Bluesky carries it because it is the only
+series aggregating many independent emitters (3,077 authors, top-author share
+0.050), a mechanical ground recorded before any outcome was observed. The grid
+grows to **4 × 5 × 2 × 4 = 160** and the Šidák level to **0.000321**; the one
+primary trial is read at α = 0.05 and the other 159 against the adjusted level.
+Every Telegram figure ships with the label **alert-feed-dominated** and its
+characterisation numbers attached. The **under-detection direction is
+registered now**: a narrow alert-dominated instrument under-samples community
+attention, which biases the measured association **toward the null**, so a
+negative on Telegram or on any pooled series carries an under-detection caveat
+and a positive is not inflated by this weakness.
+
+**Consequences.** Statistical power falls — the deflated level is ~4× stricter
+than the previous 0.00128 — and that cost is accepted deliberately, because a
+grid that pretends three constructs are one is cheaper only until someone reads
+the number. Nothing collected changes: the channel list stays frozen under §7's
+never-edit rule (Telegram has collected since 2026-08-17T04:28Z), and no
+matching rule, window, horizon, death rule, cost band or kill criterion was
+touched. The alternative considered and rejected was dropping Telegram from the
+primary entirely; it was rejected because the characterisation is a description
+of what the source emits, not a quality ruling, and discarding a collected
+source after seeing its shape is the shape of decision this project's
+registration discipline exists to prevent.

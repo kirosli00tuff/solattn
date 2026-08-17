@@ -16,22 +16,40 @@ DOC = " ".join((ROOT / "REGISTRATION.md").read_text(encoding="utf-8").split())
 """Whitespace-collapsed so a markdown reflow cannot break a pin; a deletion still does."""
 
 
-def test_trial_grid_is_forty_and_counted() -> None:
-    assert registry.TRIAL_GRID_SIZE == 40
+def test_trial_grid_is_counted_and_includes_the_series_dimension() -> None:
+    """Amendment 2 grew the grid by the series dimension; it may not grow again."""
+    assert registry.TRIAL_GRID_SIZE == 160
     assert len(registry.HORIZONS) == 4
     assert len(registry.STATISTICS) == 5
     assert len(registry.MATCH_SETS) == 2
-    assert "4 × 5 × 2 = 40 trials" in DOC
+    assert len(registry.ATTENTION_SERIES) == 4
+    assert "4 × 5 × 2 × 4 = 160 trials" in DOC
 
 
-def test_primary_trial_is_designated() -> None:
-    assert registry.PRIMARY_TRIAL == (7, "v24", "mint-exact")
-    assert "`(h = 7d, statistic = v24, match set" in DOC
+def test_series_are_per_source_plus_a_secondary_pooled() -> None:
+    assert registry.ATTENTION_SERIES == ("bluesky", "farcaster", "telegram", "pooled")
+    assert registry.SERIES_POOLED == "pooled"
+    assert "as a registered SECONDARY, never primary" in DOC
+
+
+def test_under_detection_direction_is_registered_before_results() -> None:
+    """The caveat must exist in the registration, not appear later in discussion."""
+    assert "biases the measured association toward the null" in DOC
+    assert "a positive result is not inflated by this weakness" in DOC
+
+
+def test_telegram_construct_description_is_pinned() -> None:
+    assert "alert-feed-dominated" in DOC
+
+
+def test_primary_trial_is_designated_with_its_series() -> None:
+    assert registry.PRIMARY_TRIAL == (7, "v24", "mint-exact", "bluesky")
+    assert "series = bluesky" in DOC
 
 
 def test_sidak_alpha_matches_the_registered_figure() -> None:
-    assert round(registry.SIDAK_ALPHA, 5) == 0.00128
-    assert "0.00128" in DOC
+    assert round(registry.SIDAK_ALPHA, 6) == 0.000321
+    assert "0.000321" in DOC
 
 
 def test_horizons_match_the_document() -> None:
@@ -128,3 +146,13 @@ def test_amendment_did_not_touch_the_body() -> None:
     """Nothing above the amendment line may be edited (append-only rule)."""
     assert "Registered prior that H1 finds a tradeable signal: 5 to 8 percent" in DOC
     assert DOC.index("Amendment 1") > DOC.index("What would make this registration void")
+
+
+def test_amendment_2_did_not_touch_the_collected_instruments() -> None:
+    """Amendment 2 changes reporting partition only - not any collected rule."""
+    assert registry.ATTENTION_SUBWINDOW_HOURS == (1, 6, 24)
+    assert registry.HORIZONS_PRIMARY == (1, 3, 7)
+    assert registry.DEATH_LOOKBACK_DAYS == 14
+    assert registry.COST_BPS_CENTRAL == 450
+    assert registry.CHANNEL_LIST_SIZE == 20
+    assert DOC.index("Amendment 2") > DOC.index("Amendment 1")

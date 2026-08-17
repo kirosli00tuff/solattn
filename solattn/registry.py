@@ -102,6 +102,18 @@ MATCH_SET_PRIMARY: Final = "mint-exact"
 MATCH_SET_SECONDARY: Final = "mint+cashtag"
 MATCH_SETS: Final[tuple[str, ...]] = (MATCH_SET_PRIMARY, MATCH_SET_SECONDARY)
 
+# --- Sources ----------------------------------------------------------------
+SOURCE_TELEGRAM: Final = "telegram"
+SOURCE_FARCASTER: Final = "farcaster"
+SOURCE_BLUESKY: Final = "bluesky"
+SOURCE_GECKOTERMINAL: Final = "geckoterminal"
+SOURCE_BENCHMARK: Final = "benchmark"
+ATTENTION_SOURCES: Final[tuple[str, ...]] = (
+    SOURCE_TELEGRAM,
+    SOURCE_FARCASTER,
+    SOURCE_BLUESKY,
+)
+
 # --- Horizons, bars and returns (REGISTRATION.md 4) -------------------------
 #: Entry is the close of the daily candle for d0 + ENTRY_OFFSET_DAYS, which
 #: opens strictly after the attention window closes for every time-of-day of
@@ -125,9 +137,32 @@ COST_BPS_HIGH: Final = 600
 COST_BANDS: Final[tuple[int, ...]] = (COST_BPS_LOW, COST_BPS_CENTRAL, COST_BPS_HIGH)
 
 BOOTSTRAP_DRAWS: Final = 10_000
-#: horizons (4) x statistics (5) x match sets (2). The grid MAY NOT GROW.
-TRIAL_GRID_SIZE: Final = len(HORIZONS) * len(STATISTICS) * len(MATCH_SETS)
-PRIMARY_TRIAL: Final[tuple[int, str, str]] = (7, "v24", MATCH_SET_PRIMARY)
+
+#: The attention SERIES dimension (REGISTRATION.md Amendment 2, 2026-08-17).
+#: The primary metric is computed and reported PER SOURCE; ``pooled`` is a
+#: registered secondary series, never primary. Telegram, Bluesky and Farcaster
+#: emit structurally different constructs, so one pooled number would treat
+#: three things as one.
+SERIES_POOLED: Final = "pooled"
+ATTENTION_SERIES: Final[tuple[str, ...]] = (
+    SOURCE_BLUESKY,
+    SOURCE_FARCASTER,
+    SOURCE_TELEGRAM,
+    SERIES_POOLED,
+)
+
+#: horizons (4) x statistics (5) x match sets (2) x series (4). MAY NOT GROW.
+TRIAL_GRID_SIZE: Final = len(HORIZONS) * len(STATISTICS) * len(MATCH_SETS) * len(ATTENTION_SERIES)
+#: (horizon, statistic, match set, series). Bluesky carries the primary trial on
+#: the mechanical ground recorded in Amendment 2: it is the only series whose
+#: metric aggregates many independent emitters (3,077 authors at 2.19 rows each)
+#: rather than a handful. Designated before any outcome was observed.
+PRIMARY_TRIAL: Final[tuple[int, str, str, str]] = (
+    7,
+    "v24",
+    MATCH_SET_PRIMARY,
+    SOURCE_BLUESKY,
+)
 ALPHA: Final = 0.05
 SIDAK_ALPHA: Final = 1.0 - (1.0 - ALPHA) ** (1.0 / TRIAL_GRID_SIZE)
 
@@ -211,18 +246,6 @@ CHANNEL_QUERY_SET: Final[tuple[str, ...]] = (
 #: The query set and the ingest vocabulary are the same set by construction;
 #: tests/test_registration.py pins this so the two cannot drift apart.
 CHANNEL_SEARCH_LIMIT: Final = 50
-
-# --- Sources ----------------------------------------------------------------
-SOURCE_TELEGRAM: Final = "telegram"
-SOURCE_FARCASTER: Final = "farcaster"
-SOURCE_BLUESKY: Final = "bluesky"
-SOURCE_GECKOTERMINAL: Final = "geckoterminal"
-SOURCE_BENCHMARK: Final = "benchmark"
-ATTENTION_SOURCES: Final[tuple[str, ...]] = (
-    SOURCE_TELEGRAM,
-    SOURCE_FARCASTER,
-    SOURCE_BLUESKY,
-)
 
 DAILY_CAPS: Final[dict[str, int]] = {
     SOURCE_GECKOTERMINAL: GECKOTERMINAL_DAILY_CAP,

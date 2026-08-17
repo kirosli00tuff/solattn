@@ -85,6 +85,94 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Amendment 2 — per-source attention reporting, registered before maturity — 2026-08-17
+
+*ETA stated before arming (25–35 / 30–40 / 20–25 min); held. `make lint`,
+`make typecheck`, `make test` green (**94 tests**). Collectors stayed live and
+untouched throughout.*
+
+### Task 1 — mechanical characterisation, proxies stated before computing
+
+P1 = rows ÷ distinct authors. P2 = share of rows from the single most active
+author id. P3 = share of sampled messages with ≥ 3 distinct cashtags **or**
+(cashtag + mint-address characters) ÷ total characters > 0.30, using the
+registered filter's own regexes on a fresh bounded sample (raw text is
+deliberately not persisted). P4 = persisted `match_kind` distribution. **No
+channel was classified by hand or by judgment.**
+
+| | telegram | bluesky | farcaster |
+|---|---|---|---|
+| rows (persisted, 2 days) | 65 | 6,725 | 1,174 |
+| distinct authors | **4** | **3,077** | 410 |
+| P1 rows/author | **16.25** | **2.19** | 2.86 |
+| P2 top-author share | 0.308 | 0.050 | 0.273 |
+| channels producing rows | 4 of 20 | 1 (firehose) | 1 (hub) |
+| P3 dominance share | **0.153** (n = 680) | 0.111 (n = 18) | 0.286 (n = 7) |
+| P4 ambiguous | **0.831** | 0.240 | 0.205 |
+| P4 unmatched | **0.031** | 0.487 | 0.541 |
+| P4 mint-exact | 0.000 | 0.001 | 0.000 |
+
+**P3 is a measurement for Telegram only.** The firehose samples (n = 18 and
+n = 7 passing the ingest filter in the sampling window) are too small to
+distinguish any share; those figures are recorded for completeness and are
+**not** results. A share with n = 7 is not a result.
+
+Two contrasts do not rest on the weak proxy: **16.25 rows/author from 4
+authors versus 2.19 from 3,077**, and an unmatched share of **0.031 versus
+0.487** — nearly everything Telegram emits matches the token vocabulary, the
+signature of a feed that names tokens by construction. This is a factual
+description of what each source emits, **not a quality ranking**; no source was
+dropped, down-weighted, or preferred in collection because of it.
+
+### Task 2 — Amendment 2, registered before any outcome existed
+
+At writing: attention rows existed for all three sources; **no outcome existed
+and none was looked at** (`data/outcomes/` empty, the single checkpoint run
+recorded `pools_due 0`, first maturity 2026-08-26). Registered:
+
+- **The primary attention metric is computed and reported per source.**
+- **A pooled series is reported as a registered SECONDARY, never primary** —
+  reported rather than suppressed, because hiding the comparison would be its
+  own distortion.
+- **The designated primary trial becomes `(7d, v24, mint-exact, bluesky)`**,
+  Bluesky on the mechanical ground that it is the only series aggregating many
+  independent emitters (3,077 authors, top-author share 0.050).
+- **Trial grid: 4 × 5 × 2 × 4 = 160** (was 40). One primary trial at α = 0.05;
+  the other 159 against **Šidák α_adj = 0.000321** (was 0.00128). The grid may
+  not grow again without a further amendment and a new cohort.
+- **Every Telegram figure ships labelled `alert-feed-dominated`** with its
+  characterisation numbers attached.
+- **The under-detection direction is registered now**: a narrow
+  alert-dominated instrument under-samples community attention, biasing the
+  association **toward the null** — so a negative on Telegram or any pooled
+  series carries an under-detection caveat, and a positive is not inflated by
+  this weakness. Registered before results so it cannot later be produced as a
+  rationalisation.
+
+Pinned in the build: `tests/test_registration.py` now asserts the grid size,
+the series tuple, the new primary trial, the deflated α, the
+`alert-feed-dominated` label, the under-detection sentences, and that
+Amendment 2 sits after Amendment 1 in the append-only log.
+
+### Confirmation: nothing collected was altered
+
+**No bar, rule, list or metric was changed.** The channel list remains frozen
+under §7's never-edit rule — Telegram has collected since 2026-08-17T04:28Z, so
+it stays fixed regardless of what the characterisation showed. Unchanged and
+test-pinned: attention windows (1/6/24 h), horizons (1/3/7 + 30), death floor
+(14 d, 1%), cost band (450 central, 300/600), channel-list size (20), matching
+rules, ingest filter, universe rule. Amendment 2 changes **only** how results
+are partitioned for reporting and the trial count that follows.
+
+Collectors were not restarted for this amendment and remained live throughout.
+
+### Maturity dates — unchanged
+
+**2026-08-27** for the 7-day analysis; **2026-09-19** for the 30-day. No
+analysis before those dates.
+
+---
+
 ## Stage A.1 — the MTProto ledger gap closed, the daily pass scheduled, clean restart — 2026-08-17
 
 *ETAs stated before arming (25–35 / 20 / 25–30 / 20–25 / 20–25 min per task);
