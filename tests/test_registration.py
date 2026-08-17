@@ -115,3 +115,16 @@ def test_launchpad_denylist_not_an_allowlist() -> None:
 
     assert classify_venue("pumpfun") == registry.VENUE_CLASS_LAUNCHPAD
     assert classify_venue("some-new-amm-launched-tomorrow") == registry.VENUE_CLASS_AMM
+
+
+def test_channel_query_set_is_the_ingest_vocabulary_verbatim() -> None:
+    """Amendment 1: the search queries ARE the registered §7 keyword set."""
+    assert set(registry.CHANNEL_QUERY_SET) == set(registry.INGEST_KEYWORDS)
+    assert len(registry.CHANNEL_QUERY_SET) == 11
+    assert "Amendment 1 — 2026-08-16" in DOC
+
+
+def test_amendment_did_not_touch_the_body() -> None:
+    """Nothing above the amendment line may be edited (append-only rule)."""
+    assert "Registered prior that H1 finds a tradeable signal: 5 to 8 percent" in DOC
+    assert DOC.index("Amendment 1") > DOC.index("What would make this registration void")

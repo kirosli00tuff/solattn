@@ -1,77 +1,88 @@
 # CHANNELS.md — the fixed Telegram channel list
 
-**STATUS: NOT YET FIXED (as of 2026-08-16). The Telegram collector is therefore
-inactive, and no Telegram attention is being recorded.**
+**STATUS: RESOLVED AND FIXED, 2026-08-17T04:25:27Z.**
 
-This is a deliberate outcome, not an oversight. ADR-007 fixes the list by an
-objective rule *before* collection, and states plainly that **a provisional list
-that gets "improved" later is worse than a late start** — an edited list is an
-attention-selected instrument measuring attention, which is the exact
-circularity this project exists to avoid.
+This list is now **frozen for this cohort**. It is never edited mid-collection.
+A channel that goes quiet, is renamed, or is deleted stays on the list with that
+status recorded — that is data, not a gap to patch. Re-running the resolver
+would produce a different list and is **not permitted** for this cohort
+(REGISTRATION.md Amendment 1, step 9).
 
-## The registered rule (REGISTRATION.md 7, ADR-007)
+## Method
 
-- **the top 20 public Solana / memecoin Telegram channels by member count**,
-- **from a single stated public directory**, named with its URL,
-- **read on a single stated date**, recorded with the retrieval timestamp,
-- ranked by the directory's own member-count field, ties broken by channel
-  username ascending,
-- excluding only channels the directory itself marks as non-public or
-  non-English, with each exclusion recorded by name and reason.
+**Telegram's own MTProto search**, per REGISTRATION.md **Amendment 1
+(2026-08-16)**. No human or model judgment selected any channel; every step is
+mechanical and reproducible from the query set and the timestamp recorded here.
 
-**Once written below, the list is never edited mid-collection.** A channel that
-goes quiet stays on the list with zero messages recorded — that is data, not a
-gap to patch. Any change requires a dated amendment in REGISTRATION.md and
-**starts a new cohort**.
+| | |
+|---|---|
+| source | Telegram MTProto `contacts.search`, then `channels.getFullChannel` |
+| query set | the registered §7 ingest vocabulary, **verbatim**, in fixed order |
+| search limit | 50 per query |
+| ranking field | Telegram's own **`participants_count`** (first-party), descending |
+| tie-break | channel username ascending (§7's own tie-break) |
+| cutoff | top 20 |
+| language filter | **none applied** — Telegram exposes no language field, and substituting one would be judgment |
+| read at | **2026-08-17T04:25:27Z** |
 
-## Why it is not fixed yet — the directories probed, measured 2026-08-16
+**Query set, verbatim:** `solana`, `pumpfun`, `pump.fun`, `memecoin`, `raydium`, `meteora`, `jupiter`, `dexscreener`, `birdeye`, `contract address`, `spl-token`
 
-Six public directories were probed for a machine-readable listing carrying both
-a channel username and a member count. **None served one.**
+**Hits per query:** `birdeye` 6 · `contract address` 1 · `dexscreener` 3 · `jupiter` 1 · `memecoin` 4 · `meteora` 1 · `pump.fun` 1 · `pumpfun` 3 · `raydium` 6 · `solana` 1 · `spl-token` 0
 
-| directory | URL | result (2026-08-16) |
-|---|---|---|
-| TGStat | `https://tgstat.com/en/ratings/channels/cryptocurrencies` | HTTP 404 |
-| TGStat | `https://tgstat.com/en/cryptocurrency` | HTTP 404 |
-| TGStat search | `https://tgstat.com/en/search?q=solana` | HTTP 200, 0 username+member pairs in the served HTML |
-| Telemetr | `https://telemetr.io/en/channels/category/crypto` | DNS failure (name does not resolve) |
-| telegramchannels.me | `https://telegramchannels.me/search?q=solana` | HTTP 200, 0 username+member pairs in the served HTML |
-| Combot | `https://combot.org/top/telegram/groups?q=solana` | HTTP 200, 0 username+member pairs in the served HTML |
-| Lyzem | `https://lyzem.com/search?q=solana&type=channel` | HTTP 200, 4 usernames, no member counts |
-
-The pages that returned HTTP 200 render their rankings client-side or behind an
-account, so no member-count field is available to rank by. Ranking by anything
-else — search relevance, page order, apparent activity — would **not** be the
-registered rule, and substituting a different rule silently is precisely what
-REGISTRATION.md 9 lists as voiding the registration.
-
-## What unblocks it
-
-Either is sufficient, and both are operator actions:
-
-1. **Name a directory** that publishes member counts (a TGStat account with API
-   access, or any directory the operator prefers). The rule is then applied to
-   it mechanically and the resolved list is written below with its URL and
-   retrieval timestamp.
-2. **Supply the twenty channels directly**, with the ranking source and date
-   they came from, so the provenance is recorded even though the resolution was
-   manual.
-
-Note that Telegram is blocked on a **second, independent** operator action
-regardless of this one: MTProto has no non-interactive user login, so an
-authorized session must be created once via
-`uv run python scripts/telegram_login.py`. The api_id/api_hash pair itself is
-already verified as valid (see `docs/ACCESS.md`).
+**Exclusions, counted:** not-a-public-broadcast-channel **35** ·
+no username, therefore not public **6** ·
+no registered keyword in title+username **12**.
+Unique eligible candidates after union and dedupe: **27**;
+`participants_count` successfully read for **27**.
 
 ## The resolved list
 
-*Empty. `solattn/attention/channels.py` parses the table below and returns an
-empty list while it has no rows, which keeps the Telegram collector inactive by
-construction rather than by remembering to switch it off.*
-
-| rank | channel | members | note |
+| rank | channel | participants_count | title / matched keywords |
 |---|---|---|---|
+| 1 | @memecoinx | 30,278 | Memecoin Gems Shilling 🚀 — matched `memecoin` |
+| 2 | @Raydiumx | 22,829 | RAYDIUM OFFICIAL ❇️ — matched `raydium` |
+| 3 | @myroSOL | 16,389 | $MYRO | The Solana Founders Dog — matched `solana` |
+| 4 | @MemeCoinIntelligence | 7,480 | MemeCoin Intelligence — matched `memecoin` |
+| 5 | @juicecoinnft | 7,170 | $JUICE | SOL MEMECOIN — matched `memecoin` |
+| 6 | @raydium | 4,274 | Raydium Official Announcements — matched `raydium` |
+| 7 | @birdeye_trendings | 3,454 | BIRDEYE TRENDING — matched `birdeye` |
+| 8 | @Raydiump | 3,143 | Raydium Protocol SUPPORT ❇️ — matched `raydium` |
+| 9 | @birdeye_official | 2,648 | Birdeye.so Official Community — matched `birdeye` |
+| 10 | @PumpLivePool | 2,287 | PumpFun Live Pool — matched `pumpfun` |
+| 11 | @pumpfun_migration | 2,203 | PumpFun Migration Calls — matched `pumpfun` |
+| 12 | @memecoin_signals | 1,868 | SOLANA FOMO Calls — matched `solana` |
+| 13 | @BirdeyeTrendingCI | 1,138 | Birdeye Trending - By CryptoInsider — matched `birdeye` |
+| 14 | @birdeyeso_official | 1,108 | Birdeye.so Official Community — matched `birdeye` |
+| 15 | @fasol_vol | 573 | Raydium Volume Alerts — matched `raydium` |
+| 16 | @meteoraecosystem | 564 | Meteora Ecosystem — matched `meteora` |
+| 17 | @pumpfuntrackertg | 438 | Pump.fun Tracker ⚡️ — matched `pump.fun` |
+| 18 | @birdeyecase | 420 | BIRDEYE КЕЙСЫ/ОТЗЫВЫ — matched `birdeye` |
+| 19 | @boosterdex | 403 | Boost Dexscreener — matched `dexscreener` |
+| 20 | @dexscreenerupdatealerts | 385 | Dexscreener Update Alerts | By Willi — matched `dexscreener` |
 
-**Directory:** *(not yet fixed)*
-**Read on:** *(not yet fixed)*
-**Exclusions:** *(none recorded — no list resolved)*
+## Read this before using these figures
+
+**The absolute sizes are small, and that is a property of the instrument, not a
+defect to correct.** The largest channel here has 30,278 members and the
+smallest 385. This is *not* "the twenty largest Solana channels on
+Telegram" in any absolute sense — it is the top twenty by `participants_count`
+**among what `contacts.search` returned for the registered query set**.
+Telegram's search favours close title and username matches over raw size, so the
+instrument surfaces niche, on-topic channels (trackers, shill and signal
+channels) rather than large general-crypto audiences. For an attention study
+that is arguably closer to the target than a general ranking would be — the
+TGStat crypto ranking rejected in Amendment 1 was TON tap-games and exchange
+feeds at millions of members, with zero Solana channels — but the reading of any
+result must carry this: **this measures visible attention on a small, on-topic,
+mechanically-selected instrument.**
+
+**The residual bias, restated.** Amendment 1 relocated channel-selection bias
+from "what a directory chose to list" to "what Telegram's search ranks for these
+eleven terms". It did not remove it. What is preserved is the property §7 exists
+to protect: the instrument was **fixed in advance, is mechanically reproducible
+from the recorded query set and timestamp, and cannot be adjusted once results
+are visible.**
+
+Raw resolution output, including every candidate considered and its count, is
+kept machine-locally at `data/state/channel_resolution_raw.json` (gitignored
+with the rest of `data/`).

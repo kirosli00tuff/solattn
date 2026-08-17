@@ -191,6 +191,27 @@ INGEST_KEYWORDS: Final[frozenset[str]] = frozenset(
     }
 )
 
+#: The channel-resolution query set (REGISTRATION.md Amendment 1, 2026-08-16).
+#: The registered §7 ingest vocabulary used VERBATIM as MTProto search queries,
+#: in a fixed order so a re-read is reproducible. A term is never dropped for
+#: looking unproductive - dropping one would be a judgment.
+CHANNEL_QUERY_SET: Final[tuple[str, ...]] = (
+    "solana",
+    "pumpfun",
+    "pump.fun",
+    "memecoin",
+    "raydium",
+    "meteora",
+    "jupiter",
+    "dexscreener",
+    "birdeye",
+    "contract address",
+    "spl-token",
+)
+#: The query set and the ingest vocabulary are the same set by construction;
+#: tests/test_registration.py pins this so the two cannot drift apart.
+CHANNEL_SEARCH_LIMIT: Final = 50
+
 # --- Sources ----------------------------------------------------------------
 SOURCE_TELEGRAM: Final = "telegram"
 SOURCE_FARCASTER: Final = "farcaster"

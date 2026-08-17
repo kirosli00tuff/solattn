@@ -523,4 +523,107 @@ Any of these requires an amendment and a **new cohort**, not a footnote.
 
 ## Amendments
 
-*None. The registration is as written on 2026-08-16.*
+### Amendment 1 — 2026-08-16 — the channel-list source becomes Telegram's own MTProto search
+
+**What data existed when this amendment was made.** **Telegram had collected
+zero rows.** `data/attention/mentions-*.jsonl` contained 0 records with
+`source == "telegram"` at the moment this was written, verified by count. No
+Telegram message had ever been ingested, matched, or counted. §9's voiding
+condition — *"the channel list was edited after collection began"* — **has not
+fired**, because collection on this source had not begun. The Bluesky,
+Farcaster and enumeration legs were already running and are **untouched by this
+amendment**: their cohort, their bars, and their maturity dates are unchanged.
+
+**Why the original rule could not be executed.** §7 required the top 20 public
+Solana/memecoin channels by member count **from a single stated public
+directory**. Nineteen candidate directories were probed on 2026-08-16 and **none
+publishes a Solana/memecoin ranking by member count that is readable without an
+account**:
+
+- The only freely machine-readable, member-count-ranked source found was
+  `tgstat.com/en/ratings/channels/crypto` (server-rendered, keyless, 100 rows,
+  verified strictly descending by subscribers). Its **narrowest category slug is
+  `/crypto`** — `/solana`, `/memecoin`, `/memecoins`, `/bitcoin`, `/nft`,
+  `/blockchain` and `/cryptocurrencies` all return HTTP 404 — and its top 20
+  contained **zero Solana or memecoin channels** (it is TON tap-games, TON
+  wallets, and exchange announcement feeds). It could not satisfy the rule.
+- TGStat's Solana-specific search renders results client-side, and during the
+  scout TGStat began returning **HTTP 429 "Authentication Required — Please log
+  in"** to anonymous clients IP-wide, including the ratings pages that had
+  worked earlier the same day. The scouting requests caused that gate. It is
+  recorded here as a fact about the source's availability, not routed around.
+- Every other directory probed (Telemetr, telegramchannels.me,
+  telegram-store.com, telega.io, lyzem, Combot, tlgrm.eu, tgdr.io,
+  tgchannels.org, telegramic.org) either published no member counts, rendered
+  its catalogue client-side, or returned 404/DNS failure.
+
+**Why Telegram's own search is the better instrument, not merely the available
+one.** `participants_count` obtained from `channels.getFullChannel` is
+**first-party**: it is the platform's own count, read directly from the source
+of truth, rather than a third party's cached copy of it. A directory's figure
+can be stale, sampled, or editorially curated; Telegram's cannot. The
+substitution therefore improves provenance rather than degrading it, and it
+removes the third-party availability risk that just materialised.
+
+**The amended rule.** The channel list is resolved **mechanically, by
+Telegram's own MTProto search**, with no human or model judgment selecting
+channels. Every step below is fixed by this amendment and is reproducible from
+the recorded query set and date:
+
+1. **Query set — the registered §7 ingest keyword vocabulary, used verbatim.**
+   All eleven terms, no additions, no removals, no reordering:
+   `solana`, `pumpfun`, `pump.fun`, `memecoin`, `raydium`, `meteora`,
+   `jupiter`, `dexscreener`, `birdeye`, `contract address`, `spl-token`.
+   Deriving the queries from the vocabulary already registered in §7 is what
+   makes the query set principled rather than ad hoc; a term is not dropped
+   because it looks unproductive, because dropping it would be a judgment.
+2. **Retrieval.** `contacts.search(q=<term>, limit=50)` for each term, in the
+   order listed. Results are unioned and deduplicated by channel id.
+3. **Eligibility predicate, mechanical.** A result is eligible iff it is a
+   `Channel` with `broadcast = True`, `megagroup = False` (a channel, not a
+   group, per §7's wording), and a **public `username`** (a channel without one
+   is not public and is excluded, with the exclusion counted).
+4. **Relevance predicate, mechanical.** The concatenation of the channel's
+   `title` and `username`, lowercased, must contain at least one registered
+   keyword from the query set, matched **case-insensitively at word
+   boundaries** — the identical matching rule §7's ingest filter rule 3 already
+   uses, applied through the same code path (`attention.filters.find_keywords`),
+   so the two cannot drift. `title` and `username` are used because both are
+   present on the search result itself; `about` is not used, because reading it
+   would require a per-candidate `getFullChannel` on every search hit and the
+   predicate must be decidable before that cost is paid.
+5. **Ranking field.** Telegram's own **`participants_count`**, read per
+   eligible channel via `channels.getFullChannel`, descending.
+6. **Tie-break.** Ties in `participants_count` are broken by **channel username
+   ascending**, which is the tie-break §7 already registered. No second-order
+   tie-break is needed, since usernames are unique.
+7. **Cutoff.** The **top 20**. Unchanged from §7.
+8. **No language filter is applied.** §7 permitted excluding channels *"the
+   directory itself marks as non-public or non-English"*. Telegram exposes no
+   language field, so the non-English clause is **inapplicable and is not
+   substituted for** — filtering by apparent language would be exactly the
+   judgment this amendment exists to avoid. Only the non-public clause survives,
+   implemented as the missing-username exclusion in step 3.
+9. **Recorded once, then frozen.** The resolved list, the query set, the
+   per-channel `participants_count`, and the UTC date and time of the read are
+   written to `docs/CHANNELS.md`. **From that moment the list is fixed and is
+   never edited mid-collection**, exactly as §7 requires. A channel that goes
+   quiet, gets renamed, or is deleted stays on the list with that status
+   recorded — that is data. Re-running the resolver later would produce a
+   different list and is **not** permitted for this cohort.
+
+**What is unchanged.** Everything else in this registration. The universe rule,
+the attention metric, the matching rules, the horizons, the death floor, the
+cost band, the 40-trial grid, the primary trial, the kill criteria, the
+survivorship audit, and the family separation are all untouched. This amendment
+changes **only** how the twenty channels in §7 are selected, and it does so
+before a single Telegram message has been recorded.
+
+**The residual bias, stated plainly and not solved.** Substituting Telegram's
+search for a directory does not remove channel-selection bias — it relocates
+it. The instrument is now "what Telegram's search ranks highly for these eleven
+terms", which is a different bias from "what a directory chose to list", not an
+absence of one. What the amendment buys is that the bias is **fixed in advance,
+mechanically reproducible from a recorded query set and date, and immune to
+being adjusted once results are visible.** That was always the property §7 was
+protecting, and it is preserved.

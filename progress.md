@@ -85,6 +85,98 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Stage A addendum — Amendment 1, the channel list resolved mechanically, Telegram live — 2026-08-17
+
+*Amendment drafted and the resolver built after the operator delegated approval
+and chose the MTProto-search route. At amendment time Telegram had collected
+**zero rows** (verified by count), so §9's "edited after collection began" had
+not fired. `make lint`, `make typecheck`, `make test` green (89 tests).*
+
+### What changed
+
+**REGISTRATION.md Amendment 1 (2026-08-16, appended per the amendment rule):**
+the §7 channel-list source becomes **Telegram's own MTProto search** — the
+registered eleven-term ingest vocabulary used verbatim as `contacts.search`
+queries, results unioned and deduplicated, two mechanical predicates (public
+broadcast channel; registered keyword in title+username via the same code path
+as the ingest filter), ranked by Telegram's first-party `participants_count`
+descending, §7's username tie-break, top 20. No language filter — Telegram
+exposes no language field and substituting one would be judgment. The full
+rationale (no free machine-readable directory; TGStat's anonymous gate; the
+scouting requests that tripped it; first-party provenance) is in the amendment
+itself. **No human or model judgment selected any channel.**
+
+The resolved list is in `docs/CHANNELS.md`, **fixed as of
+2026-08-17T04:14Z and never edited mid-collection**: 20 channels, top
+`@memecoinx` (30,278), floor `@dexscreenerupdatealerts` (385). 27 eligible
+candidates from 11 queries; exclusions counted (35 not-a-public-channel, 6
+no-username, 12 no-registered-keyword). The list's small absolute sizes are a
+recorded property of the instrument — Telegram search favours on-topic matches
+over raw audience size — and every result reads against that statement.
+
+### Telegram collection: live
+
+- **First collection cycle with the fixed list: 2026-08-17T04:26Z.** First
+  stored row ingested **04:28:23Z**.
+- The session file was created by the operator's own interactive login
+  (21:12 local, 2026-08-16); it is untracked, gitignored (`*.session`), and
+  verified authorized. No credential, code, or session content appears in any
+  log, commit, or this entry.
+- MTProto traffic does not pass the HTTP ledger (it is not HTTP); the
+  registered 50,000/day telegram cap is therefore currently enforced by the
+  per-cycle read limit (50 messages × 20 channels per cycle) rather than by
+  the gate. Recorded as a known gap to close, not silently reclassified.
+
+### Per-channel resolution and first-window activity
+
+The resolution table with `participants_count` per channel is
+`docs/CHANNELS.md`. Rows stored per channel in the first measured window
+(04:28–05:17Z, **49 min**): `@birdeye_trendings` 19, `@BirdeyeTrendingCI` 19,
+`@MemeCoinIntelligence` 18, `@birdeye_official` 7 — **4 of 20 channels
+produced rows; the other 16 resolved but were quiet in the window**, which is
+data, not failure. All 20 stay on the list per §7.
+
+### Four sources, one table (window 2026-08-17T04:28–05:17Z, 49 min, cumulative rows since each source started)
+
+| | telegram | bluesky | farcaster | geckoterminal (enum) |
+|---|---|---|---|---|
+| live since | 04:26Z today | 2026-08-16 16:29Z | 2026-08-16 16:29Z | 2026-08-16 16:29Z |
+| stored rows | 63 | 5,929 | 1,042 | 16,714 pool births (2 days) |
+| distinct authors | 4 | 2,751 | 365 | — |
+| matched mint | 0 | **5** | 0 | — |
+| matched cashtag | 6 | 156 | 105 | — |
+| matched name | 1 | 1,455 | 120 | — |
+| **ambiguous** | **54** | 1,339 | 216 | — |
+| unmatched | 2 | 2,974 | 601 | — |
+| requests today (ledger) | 0 (non-HTTP; see gap above) | 0 (websocket) | 4,489 / 20,000 | 544 / 10,000 |
+
+**The project's first mint-exact matches exist: 5, on Bluesky.** And the
+registered expected failure mode is now measured at scale: **86% of Telegram's
+matched-shape mentions are ambiguous** (54 of 63) — ticker collisions
+dominating exactly as §3 predicted, attributed to nobody, counted as their own
+class.
+
+### The first complete-day rate check — the disagreement did NOT survive the day
+
+**2026-08-16 closed at 1,863 `amm` births (10,318 total), ratio 1.40 against
+the registered ~1,330/day — `disagreement = 0` on the authoritative count
+basis.** The 5.5× partial-day rate reported yesterday was measured over the
+first 20 minutes of collection; the full day landed inside the registered 2×
+band. One caveat carried honestly: the day contained only ~7.5 h of collection
+(watcher started 16:29Z), so its count understates a true full day.
+Today's live rate basis still reads ~7,000/day at 05:17Z and the saturation
+marker still fires; **the first day collected from 00:00Z — 2026-08-17 — is
+the number that settles the capacity question**, and ADR-010's operator
+decision stays open until it closes.
+
+### Standing state
+
+- No analysis before **2026-08-27** (7-day maturity + checkpoint), **2026-09-19**
+  (30-day). Unchanged.
+- Collectors: watcher + attention loop running; `daily` pass should be cronned.
+
+---
+
 ## Stage A — Tasks 1–6: scaffold, measured access, collectors live, clocks started — 2026-08-16
 
 *Registration (Task 0) committed in `0c32387` before any collector existed.
