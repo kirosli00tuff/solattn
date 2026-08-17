@@ -122,12 +122,23 @@ async def consume(
     channels: list[str],
     on_message: Callable[[str, str, str, str, str], None],
     limit_per_channel: int,
+    charge: Callable[[str], None] | None = None,
+    on_flood: Callable[[str, int], None] | None = None,
 ) -> int:
     """Read recent messages from the fixed channel list.
 
     ``on_message(channel, message_id, author_id, posted_at, text)``. The channel
     list is the REGISTERED one (ADR-007) and is passed in rather than chosen
     here, so it cannot be edited by this module mid-collection.
+
+    ``charge`` is called once per channel BEFORE its history is requested — the
+    ledger hook (ADR-011). A refusal raises before anything is read and
+    propagates to the caller; nothing is fetched past the cap.
+
+    ``on_flood`` records a ``FloodWaitError`` passively: the channel is skipped
+    for this cycle and the wait is REPORTED, never slept toward or retried —
+    deliberately tripping flood control risks the account and buys a number the
+    measurement does not need.
     """
     from telethon import TelegramClient
 
@@ -141,20 +152,29 @@ async def consume(
                 "login (scripts/telegram_login.py); MTProto has no non-interactive "
                 "user login and only the operator can complete it."
             )
+        from telethon.errors import FloodWaitError
+
         for channel in channels:
-            async for message in client.iter_messages(channel, limit=limit_per_channel):
-                text = getattr(message, "message", None)
-                if not text:
-                    continue
-                sender = getattr(message, "sender_id", None)
-                on_message(
-                    channel,
-                    str(getattr(message, "id", "")),
-                    f"tg:{sender}" if sender is not None else "tg:unknown",
-                    iso(message.date) if getattr(message, "date", None) else "",
-                    str(text),
-                )
-                seen += 1
+            if charge is not None:
+                charge(channel)  # a RequestCapError here propagates: refused, nothing read
+            try:
+                async for message in client.iter_messages(channel, limit=limit_per_channel):
+                    text = getattr(message, "message", None)
+                    if not text:
+                        continue
+                    sender = getattr(message, "sender_id", None)
+                    on_message(
+                        channel,
+                        str(getattr(message, "id", "")),
+                        f"tg:{sender}" if sender is not None else "tg:unknown",
+                        iso(message.date) if getattr(message, "date", None) else "",
+                        str(text),
+                    )
+                    seen += 1
+            except FloodWaitError as flood:
+                if on_flood is not None:
+                    on_flood(channel, int(flood.seconds))
+                continue
     finally:
         await client.disconnect()
     return seen

@@ -29,14 +29,18 @@ def candles_path(settings: Settings, pool: str) -> Any:
     return settings.outcomes_dir() / f"candles-{pool}.jsonl"
 
 
-def due_days(today: date, checkpoint: int, horizon_back: int = 60) -> list[str]:
-    """Birth days whose pools are due at this checkpoint offset today."""
+def due_days(today: date, checkpoint: int, catch_up_days: int = 5) -> list[str]:
+    """Birth days due at this checkpoint today, plus a trailing catch-up window.
+
+    The window self-heals a missed daily run: the done-set makes re-scans
+    idempotent, and daily candles are retrospective, so a fetch a few days late
+    returns the identical rows the on-time fetch would have. No registered bar
+    moves — the checkpoint instants of REGISTRATION.md §8 are unchanged; this
+    only stops a skipped day from becoming a permanent hole.
+    """
     from datetime import timedelta
 
-    target = today - timedelta(days=checkpoint)
-    if target < today - timedelta(days=horizon_back):
-        return []
-    return [day_str(target)]
+    return [day_str(today - timedelta(days=checkpoint + back)) for back in range(catch_up_days)]
 
 
 def _done_path(settings: Settings) -> Any:

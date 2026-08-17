@@ -1,0 +1,73 @@
+{
+  "day": "2026-08-17",
+  "day_is_complete": false,
+  "enumeration": {
+    "amm": 1752,
+    "amm_vs_expected_ratio": 5.27,
+    "basis": "rate",
+    "disagreement": 1,
+    "expected_amm": 1330,
+    "launchpad": 5510,
+    "measured_amm_per_day": 7003.4,
+    "saturated": 1,
+    "total": 7262
+  },
+  "expected_amm_per_day": 1330,
+  "generated_at": "2026-08-17T06:02:19Z",
+  "manifest_rows": 9675,
+  "manifest_sha256": "287e2f7876499948be56bc9665cd80dd519913f62fca8229c62b9c96302334e9",
+  "match_counts": [
+    {
+      "ambiguous": 1191,
+      "conflicts": 0,
+      "day": "2026-08-17",
+      "ingested": 4531,
+      "matched_cashtag": 130,
+      "matched_mint": 7,
+      "matched_name": 1237,
+      "matched_total": 1374,
+      "source": "bluesky",
+      "unmatched": 1966
+    },
+    {
+      "ambiguous": 123,
+      "conflicts": 0,
+      "day": "2026-08-17",
+      "ingested": 552,
+      "matched_cashtag": 131,
+      "matched_mint": 0,
+      "matched_name": 86,
+      "matched_total": 217,
+      "source": "farcaster",
+      "unmatched": 212
+    },
+    {
+      "ambiguous": 13,
+      "conflicts": 0,
+      "day": "2026-08-17",
+      "ingested": 17,
+      "matched_cashtag": 4,
+      "matched_mint": 0,
+      "matched_name": 0,
+      "matched_total": 4,
+      "source": "telegram",
+      "unmatched": 0
+    },
+    {
+      "ambiguous": 1327,
+      "conflicts": 0,
+      "day": "2026-08-17",
+      "ingested": 5100,
+      "matched_cashtag": 265,
+      "matched_mint": 7,
+      "matched_name": 1323,
+      "matched_total": 1595,
+      "source": "ALL",
+      "unmatched": 2178
+    }
+  ],
+  "note": "Counts only. No analysis is performed or implied here; the registered maturity dates in REGISTRATION.md section 8 gate every analysis.",
+  "rate_disagreement_factor": 2.0,
+  "requests_today": 5691,
+  "schema": 1
+}

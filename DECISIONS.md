@@ -275,3 +275,41 @@ whether a faster pace holds; amending the universe to a narrower registered
 sub-cohort, which starts a new cohort; or accepting a registered, stated
 sampling rule, which also starts a new cohort. **No option may be taken
 silently, and this session takes none of them.**
+
+## ADR-011: MTProto reads are accounted at one ledger charge per channel-history request
+
+**Date:** 2026-08-17 · **Status:** accepted · closes the gap recorded in the Stage A addendum
+
+**Context.** The registered 50,000/day telegram cap (ADR-003, registry) was not
+enforced by the ledger: MTProto traffic is not HTTP and never passed the
+`PacedClient`, so the cap was held only by the incidental per-cycle read limit
+(50 messages × 20 channels). That is a fail-open gate — a later cadence or
+limit change would have removed the constraint without any mechanism noticing,
+and "a gate that never fires is still a gate" only holds when the gate is
+actually wired to the thing it claims to meter.
+
+**Decision.** The unit of MTProto accounting is the **channel-history request**
+— one `charge("telegram", 1)` per channel per cycle, priced **before** the
+request is sent, through the same `Ledger` the registration declares, with the
+same semantics as every other source: **a read that would breach the cap
+raises `RequestCapError`, nothing is fetched, the refusal names the arithmetic
+and writes nothing**, and the collection cycle ends at the refusal rather than
+working around it. The charge hook is injected into `telegram.consume` so an
+unmetered read path is structurally unavailable, and
+`tests/test_ledger.py::test_mtproto_channel_read_refuses_at_the_telegram_cap`
+pins the refusal in the pattern of the existing gate tests. Flood control is
+instrumented **passively** in the same change: every `FloodWaitError` is
+recorded as a `flood_wait` lifecycle marker with its channel and requested
+wait, the channel is skipped for that cycle, and the wall is never probed
+toward or slept against — deliberately tripping it risks the account and buys
+a number the measurement does not need.
+
+**Consequences.** The cap binds through the mechanism that claims to enforce
+it: at the current 20-channel list and ~5-minute cadence the spend is ~5,760
+charges/day against 50,000, so the gate is quiet headroom, not friction — and
+if the channel list or cadence ever changes, the ledger notices where the
+incidental limit would not have. Message-level accounting (one charge per
+message read) was considered and rejected: Telethon batches history into one
+request per 100 messages, so per-message charges would meter a quantity that
+does not correspond to outbound requests, and the registration's ledger counts
+requests.

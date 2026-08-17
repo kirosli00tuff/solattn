@@ -60,3 +60,20 @@ def test_report_shows_remaining(tmp_path: Path) -> None:
     ledger = build(tmp_path, 10)
     ledger.charge("src", 4)
     assert ledger.report()["src"] == {"spent": 4, "cap": 10, "remaining": 6}
+
+
+def test_mtproto_channel_read_refuses_at_the_telegram_cap(tmp_path: Path) -> None:
+    """ADR-011: one charge per channels.getHistory; the cap binds via the gate.
+
+    In the pattern of the gate tests above: the third channel read refuses,
+    names the arithmetic, and writes nothing - so a cadence change can never
+    silently remove the limit, because the limit is the ledger, not the cadence.
+    """
+    from solattn.attention.collect import charge_channel_read
+
+    ledger = Ledger(tmp_path / "requests.jsonl", {"telegram": 2}, FixedClock(NOW))
+    charge_channel_read(ledger, "memecoinx")
+    charge_channel_read(ledger, "Raydiumx")
+    with pytest.raises(RequestCapError, match=r"2 already spent .* > cap 2"):
+        charge_channel_read(ledger, "myroSOL")
+    assert ledger.spent("telegram") == 2  # the refusal wrote nothing

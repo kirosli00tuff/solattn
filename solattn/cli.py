@@ -63,6 +63,18 @@ def main(argv: list[str] | None = None) -> int:
     p_report.add_argument("--day", default="")
 
     args = parser.parse_args(argv)
+
+    if args.command in ("watch", "collect"):
+        # A supervised kill (SIGTERM) must run the finally blocks so lifecycle
+        # stop markers are written and downtime is explained, not a hole
+        # (recorder discipline; Stage A.1 Task 4).
+        import signal
+
+        def _terminate(signum: int, frame: object) -> None:
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGTERM, _terminate)
+
     clock = SystemClock()
     settings = load_settings()
     for directory in (

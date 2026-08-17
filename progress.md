@@ -85,6 +85,81 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Stage A.1 — the MTProto ledger gap closed, the daily pass scheduled, clean restart — 2026-08-17
+
+*ETAs stated before arming (25–35 / 20 / 25–30 / 20–25 / 20–25 min per task);
+all held. `make lint`, `make typecheck`, `make test` green (90 tests). No
+registered bar, matching rule, channel-list entry, or attention metric was
+touched.*
+
+### Task 1 — outcome collection: it was NOT scheduled, and now is
+
+**Finding first: the daily pass had never run.** No crontab entry, no systemd
+unit, no `data/state/checkpoints.jsonl`, zero outcome rows on disk. Not yet a
+data hole — the first checkpoint (2026-08-16 cohort at d+10) is due
+**2026-08-26** — but nine days from becoming one silently.
+
+Fixed under the same supervision discipline as the watcher: a third supervised
+component in `scripts/run_collectors.sh` (pidfile, nohup, `data/state/daily.log`)
+runs checkpoint + counts + digest once at start and then daily at ~00:40Z, when
+the previous UTC day's final candle exists. **First run: 2026-08-17T06:02:18Z**
+— `pools_due 0` (correct: nothing matures before 08-26), benchmark leg fetched
+(350 daily SOL closes, coinbase), digest written. Backfill state: nothing to
+backfill; no checkpoint was ever due before today. `due_days` also gained a
+5-day trailing catch-up window so a missed daily run self-heals: the done-set
+makes re-scans idempotent and daily candles are retrospective, so a late fetch
+returns identical rows — the §8 checkpoint instants are unchanged.
+
+### Task 2 — Telegram flood behaviour, measured passively
+
+**Nothing has been observed, and that is the report — not an inferred limit.**
+Zero flood events in every log before instrumentation (collector.log,
+watcher.log, lifecycle), and **zero `flood_wait` markers since**. The read path
+now records every `FloodWaitError` with its channel and requested wait as a
+first-class lifecycle marker, skips the channel for that cycle, and never
+probes toward the wall (deliberately tripping flood control risks the account
+and buys a number the measurement does not need). Measured cycle timing, first
+instrumented cycle: **20 channels read in 31 s** (~1.6 s/channel at the
+50-message read limit). Silence at this cadence is consistent with being far
+inside the limit; it is not evidence of where the limit is.
+
+### Task 3 — MTProto reads now pass the ledger (ADR-011)
+
+One charge per channel-history request, priced before sending, refusing with
+the standard `RequestCapError` semantics (refusal names the arithmetic, writes
+nothing, ends the cycle). The fail-open gap named in the Stage A addendum is
+closed: the 50,000/day cap binds through the gate, not through the incidental
+read limit. First post-restart cycle wrote **20 telegram ledger rows** —
+~5,760 charges/day at current cadence against the 50,000 cap.
+`tests/test_ledger.py` pins the refusal.
+
+### Task 4 — restart, with the interruption explained in the log
+
+The running processes predated the new SIGTERM handling, so the supervisor
+wrote their stop markers itself before the kill (detail: "supervised restart:
+Stage A.1"), and the restarted processes write their own from now on (SIGTERM
+now runs the finally blocks in `watch` and `collect`).
+
+| source | gap, marker to marker |
+|---|---|
+| watcher (enumeration) | stop 06:02:16Z → heartbeat 06:02:17Z = **1 s** |
+| collect loop (bluesky, farcaster, telegram) | stop 06:02:16Z → start 06:02:17Z = **1 s** (plus each source's position inside the killed ≤300 s cycle, bounded by that cycle) |
+
+All four sources confirmed collecting after the change, rows before → after
+restart (deduplicated reads): telegram **880 → 943**, bluesky **6,481 →
+6,570**, farcaster **1,420 → 1,451**, enumeration manifests **24,173 →
+24,479**. Daily loop running as a third supervised component.
+
+### Standing maturity dates — unchanged
+
+Earliest Stage B analysis: **2026-08-27** (7-day maturity 08-26 + checkpoint
+08-27 for the first full cohort). 30-day horizon: **2026-09-19**. No analysis
+happens before these dates; the first checkpoint that fetches pool outcomes
+fires 2026-08-26 and the schedule that will run it is now supervised, logged,
+and self-healing.
+
+---
+
 ## Stage A addendum — Amendment 1, the channel list resolved mechanically, Telegram live — 2026-08-17
 
 *Amendment drafted and the resolver built after the operator delegated approval

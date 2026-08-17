@@ -11,6 +11,7 @@ worked around silently.
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -140,8 +141,22 @@ def collect_farcaster(
     return counts
 
 
+def charge_channel_read(ledger: Ledger, channel: str) -> None:
+    """One ledger charge per channel-history request (ADR-011).
+
+    The unit of MTProto accounting is the channels.getHistory request — one per
+    channel per cycle at the registered read limit. Priced before the request
+    is sent; a refusal raises and nothing is read.
+    """
+    ledger.charge(registry.SOURCE_TELEGRAM, 1, f"channels.getHistory @{channel}")
+
+
 def collect_telegram(
-    settings: Settings, clock: Clock, universe: ActiveUniverse, per_channel: int
+    settings: Settings,
+    clock: Clock,
+    universe: ActiveUniverse,
+    per_channel: int,
+    ledger: Ledger,
 ) -> dict[str, int]:
     """Read the fixed channel list. Inactive without a session or without a list."""
     counts: dict[str, int] = {"messages": 0, "stored": 0}
@@ -178,11 +193,36 @@ def collect_telegram(
             counts["stored"] += 1
             counts[kind] = counts.get(kind, 0) + 1
 
-    asyncio.run(
-        telegram.consume(
-            api_id, api_hash, settings.telegram_session, channels, on_message, per_channel
+    life = Lifecycle(settings.state_dir() / "lifecycle.jsonl", "telegram", clock)
+    floods: list[tuple[str, int]] = []
+
+    def on_flood(channel: str, wait_s: int) -> None:
+        # Passive record only (Stage A.1 Task 2): the wait is reported, never
+        # slept toward, and the channel is skipped for this cycle.
+        floods.append((channel, wait_s))
+        counts["flood_waits"] = counts.get("flood_waits", 0) + 1
+        life.mark("flood_wait", f"FloodWaitError on @{channel}", channel=channel, wait_s=wait_s)
+
+    started = time.monotonic()
+    try:
+        asyncio.run(
+            telegram.consume(
+                api_id,
+                api_hash,
+                settings.telegram_session,
+                channels,
+                on_message,
+                per_channel,
+                charge=lambda channel: charge_channel_read(ledger, channel),
+                on_flood=on_flood,
+            )
         )
-    )
+    except RequestCapError as refusal:
+        # The gate refused a channel read: recorded, nothing was fetched past
+        # the cap, and the cycle ends here rather than working around it.
+        life.refused(str(refusal))
+        counts["refused_at_cap"] = 1
+    counts["cycle_elapsed_s"] = int(time.monotonic() - started)
     return counts
 
 
@@ -194,11 +234,15 @@ def collect_all(clock: Clock, settings: Settings, seconds: float = 60.0) -> dict
     ledger = Ledger(settings.vendor_dir() / "requests.jsonl", settings.daily_caps, clock)
 
     result: dict[str, Any] = {"active_universe": len(universe), "at": iso(clock.now())}
-    with PacedClient(ledger) as client:
-        result[registry.SOURCE_FARCASTER] = collect_farcaster(
-            client, settings, clock, universe, rounds=max(1, int(seconds // 10))
-        )
-    result[registry.SOURCE_BLUESKY] = collect_bluesky(settings, clock, universe, seconds)
-    result[registry.SOURCE_TELEGRAM] = collect_telegram(settings, clock, universe, 50)
-    life.stopped("collect", **{k: str(v) for k, v in result.items()})
+    try:
+        with PacedClient(ledger) as client:
+            result[registry.SOURCE_FARCASTER] = collect_farcaster(
+                client, settings, clock, universe, rounds=max(1, int(seconds // 10))
+            )
+        result[registry.SOURCE_BLUESKY] = collect_bluesky(settings, clock, universe, seconds)
+        result[registry.SOURCE_TELEGRAM] = collect_telegram(settings, clock, universe, 50, ledger)
+    finally:
+        # Written even on an interrupt, so a supervised restart reads as
+        # explained downtime rather than an unlogged hole.
+        life.stopped("collect", **{k: str(v) for k, v in result.items()})
     return result

@@ -18,6 +18,7 @@ cd "$(dirname "$0")/.."
 mkdir -p data/state
 WATCH_PID=data/state/watcher.pid
 COLLECT_PID=data/state/collector.pid
+DAILY_PID=data/state/daily.pid
 LOG=data/state
 
 start() {
@@ -37,10 +38,31 @@ start() {
     echo $! >"$COLLECT_PID"
     echo "collector started (pid $(cat "$COLLECT_PID"))"
   fi
+
+  if [ -f "$DAILY_PID" ] && kill -0 "$(cat "$DAILY_PID")" 2>/dev/null; then
+    echo "daily loop already running (pid $(cat "$DAILY_PID"))"
+  else
+    # The daily pass, under the same supervision discipline as the watcher:
+    # run once immediately (a missed day self-heals via the checkpoint
+    # catch-up window), then once per UTC day at ~00:40Z, when the previous
+    # day's final candle exists. The checkpoint CLI writes its own lifecycle
+    # markers, so every run is visible downtime-or-work in the same log.
+    nohup bash -c '
+      while true; do
+        uv run python -m solattn.cli checkpoint >>data/state/daily.log 2>&1
+        uv run python -m solattn.cli counts     >>data/state/daily.log 2>&1
+        uv run python -m solattn.cli report     >>data/state/daily.log 2>&1
+        now=$(date -u +%s)
+        next=$(date -u -d "tomorrow 00:40" +%s)
+        sleep $(( next - now ))
+      done' >>"$LOG/daily.log" 2>&1 &
+    echo $! >"$DAILY_PID"
+    echo "daily loop started (pid $(cat "$DAILY_PID"))"
+  fi
 }
 
 stop() {
-  for pidfile in "$WATCH_PID" "$COLLECT_PID"; do
+  for pidfile in "$WATCH_PID" "$COLLECT_PID" "$DAILY_PID"; do
     [ -f "$pidfile" ] || continue
     pid=$(cat "$pidfile")
     if kill -0 "$pid" 2>/dev/null; then
@@ -53,7 +75,7 @@ stop() {
 }
 
 status() {
-  for pidfile in "$WATCH_PID" "$COLLECT_PID"; do
+  for pidfile in "$WATCH_PID" "$COLLECT_PID" "$DAILY_PID"; do
     name=$(basename "$pidfile" .pid)
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
       echo "$name: running (pid $(cat "$pidfile"))"
