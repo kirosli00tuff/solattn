@@ -128,18 +128,25 @@ def parse_ohlcv(body: Any, pool: str, retrieved_at: str) -> list[Candle]:
 
 def fetch_daily_candles(
     client: PacedClient, clock: Clock, pool: str, limit: int = 100
-) -> list[Candle]:
+) -> list[Candle] | None:
     """Fetch daily candles for one pool at a horizon checkpoint.
 
     One call returns a long history, which is why a pool needs only two calls
     across its whole life (REGISTRATION.md 7).
+
+    Returns ``None`` when the source was unavailable (non-2xx or transport
+    error) and ``[]`` when the source answered 2xx with no candles. The two are
+    different facts — ADR-012's absent-data versus measured-absence split — and
+    conflating them let a transient 429 at checkpoint time read as "this pool
+    has no candles", which the checkpoint would then have recorded as done and
+    never retried (the A.3 KAT finding).
     """
     url = registry.GECKOTERMINAL_BASE + registry.OHLCV_PATH_TEMPLATE.format(pool=pool)
     response = client.get(
         SOURCE, url, params={"aggregate": 1, "limit": limit}, note=f"ohlcv {pool}"
     )
     if not response.ok:
-        return []
+        return None
     return parse_ohlcv(response.json_body, pool, iso(clock.now()))
 
 
@@ -175,7 +182,7 @@ def verify(client: PacedClient, clock: Clock) -> list[AccessResult]:
 
     if births:
         probe = births[0]
-        candles = fetch_daily_candles(client, clock, probe.pool, limit=10)
+        candles = fetch_daily_candles(client, clock, probe.pool, limit=10) or []
         results.append(
             AccessResult(
                 source=SOURCE,

@@ -64,6 +64,7 @@ def run_checkpoints(client: PacedClient, clock: Clock, settings: Settings) -> di
     done = _already_done(settings)
     fetched = 0
     refused = 0
+    unavailable = 0
     skipped_launchpad = 0
     pools_due = 0
 
@@ -84,6 +85,18 @@ def run_checkpoints(client: PacedClient, clock: Clock, settings: Settings) -> di
                     life.refused(str(refusal), pool=birth.pool, checkpoint=checkpoint)
                     refused += 1
                     break
+                if candles is None:
+                    # Source unavailable (429/5xx/transport). NOT an answer, so
+                    # the pool is NOT marked done: the catch-up window retries
+                    # it on the next daily pass. Marking it done here was the
+                    # silent-loss defect the A.3 known-answer test surfaced.
+                    life.errored(
+                        "ohlcv unavailable; will retry via catch-up window",
+                        pool=birth.pool,
+                        checkpoint=checkpoint,
+                    )
+                    unavailable += 1
+                    continue
                 if candles:
                     jsonl.append_many(
                         candles_path(settings, birth.pool), [c.to_row() for c in candles]
@@ -112,6 +125,7 @@ def run_checkpoints(client: PacedClient, clock: Clock, settings: Settings) -> di
         "pools_due": pools_due,
         "pools_fetched": fetched,
         "refusals": refused,
+        "unavailable_retrying": unavailable,
         "launchpad_skipped": skipped_launchpad,
         "benchmark_source": label or "NONE",
         "benchmark_candles": len(bench),

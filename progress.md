@@ -85,6 +85,129 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Stage A.3 — the outcome path known-answer tested ahead of its first fire — 2026-08-17
+
+*A verification, not an amendment: the registration, the trial grid, the channel
+list, the matching rules, the metric, the horizons, the death floor and the
+cost band were not touched, and no trial was added. No cohort outcome was
+observed — every KAT pool was born 2023–2024, out of cohort by construction.
+Collectors stayed live throughout. ETAs (20–25 / 15–20 / 15–20 / 20–25 min)
+held. `make lint`, `make typecheck`, `make test` green (**99 tests**).*
+
+### Task 1 — the known-answer set, with provenance
+
+Resolved from solclear's pre-registered Stage B addendum mints (committed there
+before any outcome existed) plus WIF as the known survivor, mint → earliest
+pool via the keyless token-pools endpoint, every request through the gated
+paced client:
+
+| class | pool | provenance | born | candles served |
+|---|---|---|---|---|
+| died-in-window | `4g7CkmDQ…` | solclear hard_rug `7CSWFsrB…pump` (documented, in-holdout) | 2024-10-11 | 57 sparse over 517 d |
+| alive-past-30d | `EP2ib6dY…` | WIF earliest pool | 2023-11-20 | 181 continuous |
+| sparse non-contiguous | `2YLJcB5v…` | solclear honest_candidate `gYgUiBNG…pump` | 2024-07-03 | 18 over 449 d |
+| single-candle | `4i53RDoG…` | same mint's 2nd pool | 2024-07-04 | 1 |
+| sparse dead | `HHu4yVFW…` | solclear honest_candidate `CP1KFKft…` | 2024-09-25 | 35 over 495 d |
+| no-candle (a) | 404 address probe | dead mint address used as pool id | — | `None` (source unavailable) |
+| no-candle (b) | empty list → `measure()` | direct | — | 0 |
+
+**Anchor note, stated plainly.** GeckoTerminal's keyless daily OHLCV serves a
+trailing window only — the three 2024 pools' first served candle clusters at
+2025-03-14/17, WIF's pool serves exactly 181 days, and paging past the window
+with `before_timestamp` returns **HTTP 401** (deep history is auth-gated at the
+vendor; measured, not inferred). True birth anchors are therefore unreachable
+for old pools, so the KAT anchors at `d0_kat = first_served_day − 2` and
+verifies the **path's retrieval, parsing, anchoring, death-floor and return
+arithmetic on real vendor data** rather than reproducing true birth returns.
+The production path is unaffected: cohort fetches happen at T0+10d, far inside
+any horizon. A first anchor choice (`d0_kat = first_served_day`) left the death
+branches unexercised — four of five pools landed UNMEASURABLE — and was
+corrected, because **a KAT whose interesting branches never fire proves nothing
+about them**; both runs are recorded.
+
+### Task 2 — expected values, independent route, tolerance stated first
+
+Own fetch, own JSON parse, own arithmetic implementing REGISTRATION.md §4's
+text directly (entry = close at d0+2; exit = close at d0+2+h; death iff no
+volume-bearing candle in the 14 days ending at exit or exit < 1% of entry;
+net = (1+g)(1−0.0225)² −1; deaths net exactly −100%). Only the paced transport
+is shared, because the 6 s pacing is a measured limit that binds any client.
+**Tolerance, stated before comparing:** dates exact; verdicts exact;
+returns |Δ| ≤ 1e-9; candle counts exact with one re-fetch on vendor revision.
+
+### Task 3 — comparison: 0 hard mismatches; one specification gap, surfaced 13 times
+
+40 cells across two runs (5 pools × 4 horizons × 2 anchor rules), plus the two
+no-candle probes and the benchmark leg. Every comparable cell **MATCH**:
+
+- **ALIVE returns match to ≤ 1e-9 in all 6 cells** (WIF ×4; hard-rug pool
+  h=7: −0.060664, h=30: −0.091383 — both routes identical).
+- **Horizon instants land exactly where §4 says in all 40 cells**
+  (entry = d0+2, exit = d0+2+h; `dates_ok=True` everywhere).
+- **`DEAD:no_volume_in_lookback` fires exactly where the independent §4
+  arithmetic fires it** (single-candle pool, h=30), at the registered 14-day
+  threshold.
+- **The no-candle cases do the right thing, explicitly checked:** a 404
+  address returns `None` — *source unavailable*, not marked done, retried by
+  the catch-up window; an empty candle list produces
+  `measurable=False, gross=None, net=None, reason=no_entry_mark` — **no silent
+  zero and no dropped row**, the two failures that would have mattered most.
+- **Benchmark leg** (coinbase, independent arithmetic on the path-fetched
+  series): SOL +0.011035 (1d) / +0.044017 (3d) / +0.079696 (7d) / +0.101275
+  (30d) over the WIF anchors; spans outside the served window are reported as
+  outside, never zeroed.
+- **Not exercised on real data: `dust_close`.** No KAT cell's exit close fell
+  below 1% of entry. The branch is pinned at the registered 1% threshold by
+  `tests/test_returns.py::test_dust_close_books_a_total_loss`; stated here so
+  the KAT is not read as having reached it.
+
+**The specification gap (13 of 40 cells, and it will bind on the cohort).**
+§4's death floor states two conditions: (a) no volume-bearing candle in the 14
+days ending at the exit date; (b) exit close below 1% of entry. It is **silent**
+on the case the sparse pools hit constantly: **the exit-day candle is missing
+while volume exists inside the lookback** (the pool traded recently, then not
+on the exit day). The code books this **`DEAD:no_exit_candle` = −100%**, which
+follows the registered rationale (a missing daily candle means zero trades that
+day; no trades at exit means no exit liquidity, exactly the dust-close logic)
+— but the registration does not say it. Per the report-rather-than-choose rule
+this is recorded as a gap, not silently ratified: **it needs a one-line
+amendment before Stage B reads any outcome — deadline 2026-08-26** — either
+adopting the code's conservative reading (recommended; it is the rationale's
+own extension) or defining an alternative. Until amended, the code's behaviour
+stands unchanged and this entry is the notice of it. Frequency on KAT data: 13
+of 20 sparse-pool cells, so on a cohort that solclear's priors say is ~97.5%
+dead at 30 days, this case is the **norm, not the edge**.
+
+### Task 4 — one defect found and fixed, in the outcome path only
+
+**Defect: a transient fetch failure at checkpoint time became permanent silent
+data loss.** `fetch_daily_candles` returned `[]` for *both* "the source
+answered: no candles" and "the source did not answer" (429/5xx/transport), and
+`run_checkpoints` then marked the pool done-with-0-candles either way — never
+to be refetched. A rate blip on 2026-08-26 would have silently discarded that
+pool's outcomes. **Cause:** an error collapsed into a data condition, the exact
+shape CLAUDE.md forbids and ADR-012 distinguishes (absent data vs measured
+absence). **Fix:** `fetch_daily_candles` returns `None` for
+source-unavailable and `[]` only for an answered empty; `run_checkpoints`
+marks done only on an answer, counts `unavailable_retrying`, writes an
+`error` lifecycle marker, and the 5-day catch-up window retries. Pinned by
+three new tests in `tests/test_checkpoints.py` (unavailable → not done +
+retried; answered-empty → done with 0; answered-candles → stored + done).
+
+**Verdict: the outcome path is verified ahead of its 2026-08-26 first fire** —
+retrieval, parsing, anchoring, horizon instants, the death floor at its
+registered thresholds, cost arithmetic and the benchmark leg all reproduce the
+independently derived answers within the stated tolerance, with the
+`no_exit_candle` specification gap documented above as the one item requiring
+a registration decision before any outcome is read.
+
+### Maturity dates — unchanged
+
+**2026-08-27** (7-day analysis), **2026-09-19** (30-day). No analysis before
+those dates.
+
+---
+
 ## Amendment 2 — per-source attention reporting, registered before maturity — 2026-08-17
 
 *ETA stated before arming (25–35 / 30–40 / 20–25 min); held. `make lint`,
