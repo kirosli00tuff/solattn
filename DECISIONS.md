@@ -359,3 +359,52 @@ primary entirely; it was rejected because the characterisation is a description
 of what the source emits, not a quality ruling, and discarding a collected
 source after seeing its shape is the shape of decision this project's
 registration discipline exists to prevent.
+
+## ADR-013: The death floor gains a third named condition, adopted deliberately rather than ratified silently
+
+**Date:** 2026-08-17 · **Status:** accepted · implements REGISTRATION.md Amendment 3
+
+**Context.** §4's death floor named two conditions and was silent on a third
+case: **the exit-day candle is missing while volume exists inside the
+lookback**. The implementation had always booked that as a total loss with the
+reason `no_exit_candle`, and **that behaviour predated any registration text
+authorising it**. Stage A.3's known-answer test surfaced the gap on 2026-08-17,
+where the case fired in **13 of 20 sparse-pool cells**. On a cohort that
+solclear's priors put at ~97.5% dead within 30 days, this is the norm rather
+than the edge, so leaving it unregistered meant the majority of the study's
+deaths would have been booked by an unwritten rule.
+
+**Decision.** Adopt the code's reading as the **primary registered rule**,
+consciously and in registration text: a missing exit-day candle books −100%,
+because a missing daily candle means no trades that day, no trades at exit
+means no exit liquidity, and marking a position that cannot be exited to any
+price manufactures an unrealizable recovery — the same rationale that produced
+the dust-close condition, applied where the mark is missing rather than tiny.
+Each condition becomes its own **named verdict** (`no_volume_in_lookback`,
+`dust_close`, `no_exit_candle`) so results partition by which one fired. One
+alternative, `carry_forward` (mark to the last available close), is registered
+as a **robustness report computed alongside the primary** — never a selectable
+trial, never a headline, and adding **no cells to the grid**, which stays at
+**160** with **α_adj = 0.000321**.
+
+**The bias direction, and why it is registered rather than discussed later.**
+Higher-attention pools that trade more frequently will miss exit-day candles
+less often, so this condition fires disproportionately on the **lower-attention
+comparison group**, depressing the base rate and **biasing the measured
+association toward H1**. That is the **opposite direction** from Amendment 2's
+under-detection caveat, which biases toward the null. Both now sit in the
+registration together; they act on different parts of the measurement and
+neither cancels the other. Because this direction is unfavourable, the
+mitigation is registered with it: the **per-attention-stratum firing rate of
+`no_exit_candle` is a first-class Stage B output** reported with its n
+alongside the returns, and **a large differential is itself a finding about the
+instrument**.
+
+**Consequences.** The rule that will book most of this study's deaths is now
+written down, attributable, and partitionable, and the direction it pushes the
+result is on the record before any outcome was read. The alternative reading is
+available as sensitivity without becoming a second bite at the headline. The
+cost accepted: `carry_forward` will sometimes look better than the primary, and
+this registration forbids reporting it as the result anyway — which is the
+point, and `tests/test_registration.py` pins that constraint's text along with
+the grid size and the Šidák level.

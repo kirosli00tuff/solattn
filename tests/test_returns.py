@@ -95,3 +95,71 @@ def test_death_rate_reports_its_n() -> None:
     n, rate = death_rate(outcomes)
     assert n == 2
     assert rate == 0.5
+
+
+# --- Amendment 3 ------------------------------------------------------------
+
+
+def test_missing_exit_candle_books_no_exit_candle_distinctly() -> None:
+    """The third condition is its own verdict, not folded into the other two."""
+    # Arrange - traded on d0+2 and d0+8 (volume in lookback), nothing on d0+9
+    outcome = measure(MINT, POOL, BORN, 7, series({2: 1.0, 8: 0.9}))
+    # Assert
+    assert outcome.dead is True
+    assert outcome.death_reason == registry.DEATH_NO_EXIT_CANDLE
+    assert outcome.death_reason != registry.DEATH_NO_VOLUME
+    assert outcome.death_reason != registry.DEATH_DUST
+    assert outcome.net_return == registry.DEATH_RETURN
+
+
+def test_carry_forward_marks_to_the_last_available_close() -> None:
+    """The robustness reading marks to d0+8's close instead of booking -100%."""
+    candles = series({2: 1.0, 8: 0.9})
+    primary = measure(MINT, POOL, BORN, 7, candles)
+    alt = measure(MINT, POOL, BORN, 7, candles, exit_rule=registry.EXIT_RULE_CARRY_FORWARD)
+    assert primary.net_return == registry.DEATH_RETURN
+    assert alt.dead is False
+    assert alt.gross_return is not None
+    assert abs(alt.gross_return - (0.9 / 1.0 - 1.0)) < 1e-12
+
+
+def test_carry_forward_still_honours_the_other_two_conditions() -> None:
+    """Amendment 3: (a) and (b) apply unchanged under the alternative."""
+    dusty = measure(
+        MINT, POOL, BORN, 7, series({2: 1.0, 8: 0.001}), exit_rule=registry.EXIT_RULE_CARRY_FORWARD
+    )
+    assert dusty.dead is True
+    silent = measure(
+        MINT,
+        POOL,
+        BORN,
+        7,
+        series({2: 1.0, 8: 0.9}, volume=0.0),
+        exit_rule=registry.EXIT_RULE_CARRY_FORWARD,
+    )
+    assert silent.dead is True
+    assert silent.death_reason == registry.DEATH_NO_VOLUME
+
+
+def test_an_unregistered_exit_rule_raises_rather_than_growing_the_grid() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="not a registered exit rule"):
+        measure(MINT, POOL, BORN, 7, series({2: 1.0}), exit_rule="whatever_looks_best")
+
+
+def test_death_reasons_partition_and_stratum_rate_reports_its_n() -> None:
+    from solattn.outcomes.returns import death_reason_rates, no_exit_candle_rate_by_stratum
+
+    q5 = [measure(MINT, POOL, BORN, 7, series({2: 1.0, 9: 1.5}))]  # alive
+    q1 = [
+        measure(MINT, POOL, BORN, 7, series({2: 1.0, 8: 0.9})),  # no_exit_candle
+        measure(MINT, POOL, BORN, 7, series({2: 1.0, 9: 0.001})),
+    ]  # dust
+    rates = death_reason_rates(q1)
+    assert rates[registry.DEATH_NO_EXIT_CANDLE] == 0.5
+    assert rates[registry.DEATH_DUST] == 0.5
+    per = no_exit_candle_rate_by_stratum({"Q5": q5, "Q1": q1})
+    assert per["Q5"]["no_exit_candle_rate"] == 0.0
+    assert per["Q1"]["no_exit_candle_rate"] == 0.5
+    assert per["Q1"]["n"] == 2.0  # a rate with a hidden n is not a result

@@ -156,3 +156,54 @@ def test_amendment_2_did_not_touch_the_collected_instruments() -> None:
     assert registry.COST_BPS_CENTRAL == 450
     assert registry.CHANNEL_LIST_SIZE == 20
     assert DOC.index("Amendment 2") > DOC.index("Amendment 1")
+
+
+# --- Amendment 3: the death floor's third condition -------------------------
+
+
+def test_amendment_3_registers_no_exit_candle_as_its_own_verdict() -> None:
+    assert registry.DEATH_NO_EXIT_CANDLE == "no_exit_candle"
+    assert registry.DEATH_REASONS == (
+        "no_volume_in_lookback",
+        "dust_close",
+        "no_exit_candle",
+    )
+    assert len(set(registry.DEATH_REASONS)) == 3  # distinct, so deaths partition
+    assert "(c) `no_exit_candle` — the exit-day candle is absent." in DOC
+
+
+def test_amendment_3_records_that_it_did_not_silently_ratify() -> None:
+    assert "That behaviour predated any registration text authorising" in DOC
+    assert "13 of 20 sparse-pool cells" in DOC
+    assert "as a registration decision" in DOC
+
+
+def test_amendment_3_registers_the_bias_direction_toward_the_hypothesis() -> None:
+    """The unfavourable direction must be in the registration, not the discussion."""
+    assert "biases the measured association toward the hypothesis" in DOC
+    assert "opposite direction from the under-detection caveat registered in" in DOC
+    # Amendment 2's opposite-direction caveat still stands alongside it
+    assert "biases the measured association toward the null" in DOC
+
+
+def test_amendment_3_registers_the_per_stratum_mitigation() -> None:
+    assert "must be reported per attention stratum as a first-class Stage B output" in DOC
+    assert "is itself a finding about the instrument" in DOC
+
+
+def test_carry_forward_is_a_robustness_report_not_a_selectable_trial() -> None:
+    assert registry.EXIT_RULES == ("primary", "carry_forward")
+    assert "may never become the headline" in DOC
+    assert "It adds no cells to the trial grid" in DOC
+
+
+def test_amendment_3_did_not_move_the_grid_or_any_other_bar() -> None:
+    """The whole point: a specification gap closed without touching a bar."""
+    assert registry.TRIAL_GRID_SIZE == 160
+    assert round(registry.SIDAK_ALPHA, 6) == 0.000321
+    assert registry.PRIMARY_TRIAL == (7, "v24", "mint-exact", "bluesky")
+    assert registry.DEATH_LOOKBACK_DAYS == 14
+    assert registry.DEATH_DUST_FRACTION == 0.01
+    assert registry.ENTRY_OFFSET_DAYS == 2
+    assert registry.COST_BPS_CENTRAL == 450
+    assert DOC.index("Amendment 3") > DOC.index("Amendment 2")

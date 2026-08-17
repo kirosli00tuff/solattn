@@ -71,6 +71,18 @@ def net_of_cost(gross: float, cost_bps: int) -> float:
     return max(net, registry.DEATH_RETURN)
 
 
+def last_close_at_or_before(candles: list[Candle], day: date) -> Candle | None:
+    """The most recent candle at or before ``day``.
+
+    Used only by the ``carry_forward`` ROBUSTNESS reading (Amendment 3). It is
+    never consulted by the primary rule.
+    """
+    eligible = [c for c in candles if date.fromisoformat(c.day) <= day]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda c: c.day)
+
+
 def measure(
     mint: str,
     pool: str,
@@ -78,8 +90,23 @@ def measure(
     horizon_days: int,
     candles: list[Candle],
     cost_bps: int = registry.COST_BPS_CENTRAL,
+    exit_rule: str = registry.EXIT_RULE_PRIMARY,
 ) -> Outcome:
-    """Measure one pool at one horizon under the registered rules."""
+    """Measure one pool at one horizon under the registered rules.
+
+    ``exit_rule`` selects the exit-mark reading. ``primary`` is the registered
+    rule and the only one any headline may use: a missing exit-day candle books
+    a total loss (``DEAD:no_exit_candle``), because a missing daily candle means
+    no trades that day and no trades at exit means no exit liquidity.
+    ``carry_forward`` is the registered ROBUSTNESS reading - it marks to the
+    last available close instead - and is reported alongside, never selected
+    over, the primary (Amendment 3).
+    """
+    if exit_rule not in registry.EXIT_RULES:
+        raise ValueError(
+            f"{exit_rule!r} is not a registered exit rule; Amendment 3 fixes "
+            f"{registry.EXIT_RULES} and the grid may not grow."
+        )
     entry_on = entry_date(born_on)
     exit_on = exit_date(born_on, horizon_days)
     indexed = _by_day(candles)
@@ -111,12 +138,32 @@ def measure(
             entry.close,
             exit_candle.close if exit_candle else None,
             True,
-            "no_volume_in_lookback",
+            registry.DEATH_NO_VOLUME,
             registry.DEATH_RETURN,
             registry.DEATH_RETURN,
         )
 
     if exit_candle is None:
+        # Amendment 3, registered: a missing exit-day candle means no trades on
+        # the exit day, therefore no exit liquidity, therefore a total loss.
+        # Named distinctly so results partition by which condition fired.
+        if exit_rule == registry.EXIT_RULE_CARRY_FORWARD:
+            carried = last_close_at_or_before(candles, exit_on)
+            if carried is not None and carried.close >= entry.close * registry.DEATH_DUST_FRACTION:
+                gross = (carried.close / entry.close) - 1.0
+                return Outcome(
+                    mint,
+                    pool,
+                    horizon_days,
+                    day_str(entry_on),
+                    day_str(exit_on),
+                    entry.close,
+                    carried.close,
+                    False,
+                    "",
+                    gross,
+                    net_of_cost(gross, cost_bps),
+                )
         return Outcome(
             mint,
             pool,
@@ -126,7 +173,7 @@ def measure(
             entry.close,
             None,
             True,
-            "no_exit_candle",
+            registry.DEATH_NO_EXIT_CANDLE,
             registry.DEATH_RETURN,
             registry.DEATH_RETURN,
         )
@@ -141,7 +188,7 @@ def measure(
             entry.close,
             exit_candle.close,
             True,
-            "dust_close",
+            registry.DEATH_DUST,
             registry.DEATH_RETURN,
             registry.DEATH_RETURN,
         )
@@ -168,3 +215,42 @@ def death_rate(outcomes: list[Outcome]) -> tuple[int, float]:
     if not measurable:
         return (0, 0.0)
     return (len(measurable), sum(1 for o in measurable if o.dead) / len(measurable))
+
+
+def death_reason_rates(outcomes: list[Outcome]) -> dict[str, float]:
+    """Share of measurable outcomes booked by each registered death condition.
+
+    Partitioning deaths by condition is what makes the Amendment 3 mitigation
+    checkable: ``no_exit_candle`` firing at different rates across attention
+    strata would bias the comparison, so the rate is reported rather than
+    absorbed into the returns.
+    """
+    measurable = [o for o in outcomes if o.measurable]
+    if not measurable:
+        return dict.fromkeys(registry.DEATH_REASONS, 0.0)
+    return {
+        reason: sum(1 for o in measurable if o.death_reason == reason) / len(measurable)
+        for reason in registry.DEATH_REASONS
+    }
+
+
+def no_exit_candle_rate_by_stratum(
+    outcomes_by_stratum: dict[str, list[Outcome]],
+) -> dict[str, dict[str, float]]:
+    """Per-attention-stratum ``no_exit_candle`` firing rate — a Stage B output.
+
+    REQUIRED by Amendment 3 as a first-class result, not a diagnostic: the rule
+    biases toward the hypothesis if higher-attention pools trade more often and
+    so hit it less, and **a large differential is itself a finding about the
+    instrument**. Reported with its n, because a rate with a hidden n is not a
+    result.
+    """
+    out: dict[str, dict[str, float]] = {}
+    for stratum, outcomes in outcomes_by_stratum.items():
+        measurable = [o for o in outcomes if o.measurable]
+        fired = sum(1 for o in measurable if o.death_reason == registry.DEATH_NO_EXIT_CANDLE)
+        out[stratum] = {
+            "n": float(len(measurable)),
+            "no_exit_candle_rate": (fired / len(measurable)) if measurable else 0.0,
+        }
+    return out

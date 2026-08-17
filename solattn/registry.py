@@ -123,10 +123,31 @@ HORIZONS_PRIMARY: Final[tuple[int, ...]] = (1, 3, 7)
 HORIZONS_SECONDARY: Final[tuple[int, ...]] = (30,)
 HORIZONS: Final[tuple[int, ...]] = HORIZONS_PRIMARY + HORIZONS_SECONDARY
 
-#: The death floor, ported from solclear ADR-013.
+#: The death floor, ported from solclear ADR-013 and extended by Amendment 3.
 DEATH_LOOKBACK_DAYS: Final = 14
 DEATH_DUST_FRACTION: Final = 0.01
 DEATH_RETURN: Final = -1.0
+
+#: The three death conditions, named so results can be PARTITIONED by which one
+#: fired (REGISTRATION.md Amendment 3). ``no_exit_candle`` was the code's
+#: behaviour before it was registered text; A.3's known-answer test surfaced the
+#: gap and Amendment 3 adopts the reading deliberately.
+DEATH_NO_VOLUME: Final = "no_volume_in_lookback"
+DEATH_DUST: Final = "dust_close"
+DEATH_NO_EXIT_CANDLE: Final = "no_exit_candle"
+DEATH_REASONS: Final[tuple[str, ...]] = (
+    DEATH_NO_VOLUME,
+    DEATH_DUST,
+    DEATH_NO_EXIT_CANDLE,
+)
+
+#: Exit-mark rules. ``primary`` is fixed by Amendment 3 and is the ONLY rule a
+#: headline may use. ``carry_forward`` is a registered ROBUSTNESS REPORT
+#: computed alongside it - never a selectable trial, and it adds NO cells to the
+#: grid (which stays at TRIAL_GRID_SIZE with SIDAK_ALPHA unchanged).
+EXIT_RULE_PRIMARY: Final = "primary"
+EXIT_RULE_CARRY_FORWARD: Final = "carry_forward"
+EXIT_RULES: Final[tuple[str, ...]] = (EXIT_RULE_PRIMARY, EXIT_RULE_CARRY_FORWARD)
 
 #: The execution-cost band, ported from solclear ADR-014. Applied to a
 #: hypothetical, to ask whether a measured lift would survive costs. Nothing in

@@ -85,6 +85,104 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Amendment 3 — the death-floor specification gap closed — 2026-08-17
+
+*ETAs (25–30 / 10–15 / 10–15 / 30–40 / 20–25 min) held. `make lint`,
+`make typecheck`, `make test` green (**110 tests**). Collectors stayed live and
+untouched. No bar, grid, list, matching rule, metric or horizon moved.*
+
+### No outcome existed — stated precisely, not loosely
+
+The prompt asked me to confirm `data/outcomes/` was empty. **It was not, and
+the precise statement is the one that matters:** the directory held **exactly
+one file, `benchmark-sol.jsonl`** — the SOL benchmark leg fetched by the daily
+pass, a SOL price series containing no cohort pool and incapable of informing a
+death rule — and **zero `candles-*.jsonl`**. `data/state/checkpoints.jsonl` was
+**absent**: no checkpoint has ever recorded a pool. **No cohort outcome existed,
+and none was read, fetched or inspected during this stage.** Disclosed for
+completeness: out-of-cohort KAT candles from A.3 (pools born 2023–2024) sit at
+`data/state/kat_raw_candles.json` and were seen during A.3 — they are the
+evidence *for* this amendment, not a cohort outcome. First checkpoint fires
+**2026-08-26**, nine days out.
+
+### Task 1 — the rule, registered and not silently ratified
+
+Amendment 3 adds condition **(c) `no_exit_candle`**: a missing exit-day candle
+books −100%, on the registered ground that a missing daily candle means no
+trades that day, no trades at exit means no exit liquidity, and marking a
+position that cannot be exited manufactures an unrealizable recovery — the
+dust-close rationale applied where the mark is *missing* rather than tiny.
+Each condition is now its own **named verdict** so deaths partition by cause.
+
+The amendment records explicitly that **A.3 surfaced the gap**, that **the
+code's behaviour predated the registration text**, and that the amendment
+**adopts it as a decision** rather than describing what the code happens to do.
+
+**A method note.** The prompt asked me to write the rule into §4. The
+registration's own header forbids editing anything above an amendment line, so
+I did **not** edit §4 in place — the amendment reproduces the death floor **in
+full, as amended**, and states that it governs. That honours both instructions;
+had I edited §4 directly I would have broken the append-only property that
+makes the registration trustworthy.
+
+### Task 2 — the bias direction, registered before any outcome
+
+**This rule biases toward the hypothesis, and that is now in the
+registration.** If higher-attention pools trade more frequently they miss
+exit-day candles less often, so (c) fires disproportionately on the
+**lower-attention comparison group**, depressing the base rate the top quintile
+is measured against.
+
+**This is the opposite direction from Amendment 2's under-detection caveat**,
+which biases toward the null. Both now stand in the registration together, act
+on different parts of the measurement, and neither cancels the other.
+
+**Registered mitigation, because the direction is unfavourable:** the
+**per-attention-stratum firing rate of `no_exit_candle` is a first-class Stage B
+output**, reported with its n alongside the returns and never folded into them,
+for every quintile and for the registered binary fallback split. **A large
+differential is itself a finding about the instrument**, reported as such
+whatever it does to the headline.
+
+### Task 3 — the alternative is a robustness report, not a trial
+
+`carry_forward` (mark to the last available close at or before the exit date;
+conditions (a) and (b) still apply) is registered as a **robustness report
+computed and reported alongside the primary**. The registration states in text
+that the primary is fixed, that `carry_forward` **may never become the
+headline**, may not be substituted into any table presented as the result, may
+not be chosen for producing a nicer number, and **adds no cells to the grid**.
+
+**The grid is unchanged: 160 cells, Šidák α_adj = 0.000321**, exactly as
+Amendment 2 left them — pinned by
+`test_amendment_3_did_not_move_the_grid_or_any_other_bar`.
+
+### Task 4 — implemented and pinned
+
+`measure()` takes a registered `exit_rule`; an unregistered value **raises**
+rather than silently widening the grid. The three death reasons are registry
+constants and emitted distinctly. `death_reason_rates()` and
+`no_exit_candle_rate_by_stratum()` implement the mitigation, the latter
+returning `n` alongside every rate. Eleven new tests pin the registered text,
+verdict distinctness, grid invariance, the robustness semantics, and that
+`carry_forward` still honours conditions (a) and (b).
+
+**A defect in my own patching, caught by a test and worth recording.** Two
+`str.replace` calls silently no-opped because `ruff format` had already
+exploded the target call sites onto one argument per line, so the death-reason
+constants and the carry-forward branch were never inserted — and the file
+still *looked* correct. A behavioural test failed and exposed it. The fix
+asserts every replacement before applying it. The general lesson, already in
+CLAUDE.md's spirit: **an unasserted string replacement is a silent no-op
+waiting to happen**, and only a test that exercises the branch will notice.
+
+### Maturity dates — unchanged
+
+**2026-08-27** (7-day analysis), **2026-09-19** (30-day). No analysis before
+those dates.
+
+---
+
 ## Stage A.3 — the outcome path known-answer tested ahead of its first fire — 2026-08-17
 
 *A verification, not an amendment: the registration, the trial grid, the channel

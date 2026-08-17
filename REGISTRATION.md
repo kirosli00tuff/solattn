@@ -727,3 +727,98 @@ outcomes; and a positive result is not inflated by this weakness, since the
 bias runs the other way.** This sentence is registered here, before any
 outcome, so it cannot be produced afterwards as a rationalisation of whichever
 result appears.
+
+### Amendment 3 — 2026-08-17 — the death floor gains an explicit third condition: `no_exit_candle`
+
+**What data existed when this amendment was made.** **No cohort outcome
+existed, and none was read, fetched, or inspected while drafting.** Stated
+precisely rather than loosely: `data/outcomes/` contained **exactly one file,
+`benchmark-sol.jsonl`** — the SOL benchmark leg, a price series for SOL that
+contains no cohort pool and cannot inform this rule — and **zero
+`candles-*.jsonl`**; `data/state/checkpoints.jsonl` was **absent**, so no
+checkpoint has ever recorded a pool. The first checkpoint fires **2026-08-26**,
+nine days after this amendment. Out-of-cohort candles from the A.3
+known-answer test (pools born 2023–2024, not cohort members) exist at
+`data/state/kat_raw_candles.json` and were seen during A.3; they are disclosed
+here for completeness and are the *evidence* for this amendment, not a cohort
+outcome.
+
+**How this amendment is written, given the append-only rule.** §4 is not edited
+in place — this registration's own header forbids editing anything above an
+amendment line. The amended death floor is therefore reproduced **in full,
+here**, and this text governs. §4's original two-condition text remains as
+written and is superseded by what follows.
+
+**The gap, and that the code predated the text.** §4's death floor stated two
+conditions: (a) no volume-bearing candle in the 14 days ending at the exit
+date; (b) exit close below 1% of the entry close. It was **silent** on a third
+case: **the exit-day candle is missing while volume exists inside the
+lookback** — a pool that traded recently but not on the exit day. The
+implementation has always booked this as a total loss with the reason
+`no_exit_candle`. **That behaviour predated any registration text authorising
+it.** The Stage A.3 known-answer test surfaced the gap on 2026-08-17 by
+comparing the path against independently derived expected values, where the
+case fired in **13 of 20 sparse-pool cells**. A.3 recorded it as a
+specification gap and deliberately did **not** ratify it silently. **This
+amendment adopts the code's reading, consciously, as a registration decision
+made before any outcome exists** — not as a description of what the code
+happens to do.
+
+**The amended death floor, in full.** At horizon `h`, a position **books
+exactly −100%** if any of the following holds:
+
+- **(a) `no_volume_in_lookback`** — there is no candle with non-zero volume in
+  the 14 days ending at the exit date.
+- **(b) `dust_close`** — the exit close is below 1% of the entry close.
+- **(c) `no_exit_candle` — the exit-day candle is absent.** A missing daily
+  candle means **no trades occurred that day**; no trades at exit means **no
+  exit liquidity**; and marking a position that cannot be exited to any price
+  manufactures an unrealizable recovery. This is the same rationale that
+  produced (b), applied to the case where the mark is missing rather than dust.
+
+**Each condition is its own named verdict** — `no_volume_in_lookback`,
+`dust_close`, `no_exit_candle` — and **every result partitions deaths by which
+condition fired**. Dead pools stay in their quintile, unchanged. Conditions
+(a) and (b), the 14-day lookback, the 1% dust fraction, the entry/exit anchors,
+the cost band and every other bar are **unchanged**.
+
+**The bias direction, registered before any outcome — and it runs toward the
+hypothesis.** If pools with higher attention trade more frequently, they will
+have missing exit-day candles **less often**, so condition (c) fires
+disproportionately on the **lower-attention comparison group**. Booking those
+as −100% depresses the base rate against which the top attention quintile is
+measured, which **biases the measured association toward the hypothesis**.
+**This is the opposite direction from the under-detection caveat registered in
+Amendment 2**, and both now stand together in this registration: Amendment 2's
+narrow alert-dominated Telegram instrument biases **toward the null**;
+Amendment 3's death rule biases **toward H1**. Neither cancels the other, they
+act on different parts of the measurement, and **both are stated here before any
+outcome so neither can be produced afterwards as a rationalisation.**
+
+**The registered mitigation, because the direction is unfavourable.** The rate
+at which `no_exit_candle` fires **must be reported per attention stratum as a
+first-class Stage B output**, with its n, alongside the returns — never folded
+into them. Concretely: for each quintile (and for the registered binary
+fallback split), report the share of measurable outcomes booked by each of the
+three death conditions. **A large differential in `no_exit_candle` firing
+across strata is itself a finding about the instrument** and is reported as
+such, whatever it does to the headline. If the differential is large, the
+headline is read against it rather than in front of it.
+
+**The alternative reading, registered as a ROBUSTNESS REPORT and explicitly not
+a trial.** One alternative is registered: **`carry_forward` — mark the exit to
+the last available close at or before the exit date**, instead of booking
+−100%. Conditions (a) and (b) still apply unchanged under it. It is computed
+and reported alongside the primary at Stage B.
+
+**The constraint, stated so a future session cannot read the pair as a
+choice:** the **primary rule is fixed by this amendment**. `carry_forward` is a
+**robustness report only**. It **may never become the headline**, may not be
+substituted for the primary in any table presented as the result, and may not
+be selected on the basis of which produces a more favourable number. **It adds
+no cells to the trial grid: the grid remains at 160 and the Šidák level remains
+α_adj = 0.000321**, exactly as Amendment 2 registered them. Reporting the two
+side by side is a statement about sensitivity to a specification choice, not a
+menu. A future session that reports `carry_forward` as the result has violated
+this registration, and `tests/test_registration.py` pins the grid size, the
+Šidák level and this constraint's text against exactly that.
