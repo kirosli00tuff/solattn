@@ -475,3 +475,135 @@ partial coverage from that source rather than backfill-filled coverage; the
 direction is toward the null for those pools. The rule is keyed on a per-source
 constant, and a source without one excludes nothing, so adding a source cannot
 silently drop its rows.
+
+## ADR-016: The enumeration miss is registered as a declared property of the cohort, not a discussion note
+
+**Date:** 2026-08-18 · **Status:** accepted · implements REGISTRATION.md Amendment 5
+
+**Context.** §1 states that membership "is decided by birth and by nothing
+else." Stage A.5 measured, mechanically and from the feed's own ordering, that
+**28–35% of births are never enumerated**: 401 of 884 consecutive sweep pairs
+show zero overlap, which proves the read window advanced past what was read,
+and the union of per-page read windows covers only **70.4%** of elapsed feed
+time. Two independent routes — integrating each proven gap at the locally
+measured rate, and the feed's own in-window rate — agree within 10.6%.
+
+**The miss is not uniform.** It spans **8.7% at 07:00 UTC to 65.0% at 16:00**,
+and the fastest birth-rate quintile carries **8.3× the missed births of the
+slowest on the same number of gaps**. Uniform thinning would cost power and
+nothing else. This concentrates in exactly the periods where market-wide
+activity — and therefore social attention — is heaviest.
+
+**Decision.** Register it, with its figures, its direction, and a per-result
+reporting requirement, **before any outcome is read**. The selection *rule* is
+unchanged and no attention surface touches enumeration; what is registered is
+that the *realised* cohort is a **non-uniform sample** of the birth-ordered
+population, thinned by a paced reader that cannot keep up with the feed.
+
+The direction is registered in the pattern of Amendments 2 and 3: under-sampling
+the high end of the predictor **biases the measured association toward the
+null**, so **a negative carries a declared under-detection caveat and a positive
+is not inflated by it**. The estimate is registered as a **lower bound on both
+routes**, with the reason — route B measures the rate only during covered time
+(biased quiet), route A prices gaps from the slower windows bracketing them.
+
+**Alternatives rejected.** *Fixing enumeration instead of declaring it*: A.5
+priced complete enumeration at a combined 26,330 requests/day, which only the
+Lite tier ($499/mo) clears; the operator chose the free tier, so option D
+governs and the documentation it requires **is** this registration. *Reporting
+it in the Stage B discussion*: a caveat written after a result is read is
+indistinguishable from a rationalisation of that result, which is the failure
+rule 2 exists to prevent. *Restricting the universe to shrink the miss*: that
+starts a new cohort and does not make the sample uniform.
+
+**Consequences.** Every result, at every horizon, now carries the miss rate,
+its non-uniformity, and its n, alongside the survivorship audit §5 already
+requires — a result that omits them is not reportable. No bar moves: the grid
+stays at **160** cells with **α_adj = 0.000321** and this amendment adds no
+trial. Nothing collected changes and nothing already collected is discarded or
+reweighted. `tests/test_registration.py` pins the figures, the lower-bound
+statement, the direction and the reporting requirement, so a later deletion
+breaks the build.
+
+## ADR-017: On the enumeration path, an unanswered page is not an empty one
+
+**Date:** 2026-08-18 · **Status:** accepted · extends ADR-012 to enumeration
+
+**Context.** `geckoterminal.fetch_new_pools` returned `[]` on any non-2xx, and
+`sweep_once` read a falsy page as the end of the feed. **A 429 therefore ended
+the sweep early, silently** — no refusal marker, no error marker, and a
+short read recorded as a complete one. This is precisely the absent-data versus
+measured-absence shape ADR-012 fixed on the OHLCV path after the A.3
+known-answer test, left live on the enumeration path.
+
+The ledger could not have surfaced it either: it charges **before** sending and
+never recorded the status, so a 429 and a 200 were indistinguishable in the
+record. A.5 had to re-probe the live source to discover the rate limiter fires
+at all (2 of 10 requests at ~3 s effective spacing).
+
+**Stated precisely: the defect never fired in the collected data.** All **887
+of 887** sweeps recorded `pages_read = 4` and `pools_seen = 80`; zero truncated
+sweeps and zero pool-slots lost. The 429s were provoked by a probe adding a
+third client alongside the two watchers of ADR-018. This ADR fixes a latent
+defect, and says so rather than implying data was lost.
+
+**Decision.** `fetch_new_pools` returns `None` when the source did not answer
+and `[]` when it answered with no rows. `sweep_once` treats the two
+differently: `None` writes an **error** lifecycle marker naming the page,
+counts `pages_unavailable`, sets `truncated`, and stops — explicitly *not* as
+end-of-feed; `[]` ends the sweep with no marker, because a served empty page is
+measured absence. Both counters ride on the per-sweep heartbeat, so a
+retrospective can find truncated sweeps without re-probing the source. A
+truncated sweep still writes the pages that **were** served: refusing loudly
+must not discard good data.
+
+The ledger records the status as an **append-only settle row** carrying
+`count = 0`. The charge is priced before the request is sent and the ledger is
+append-only, so the status cannot go on the charge row and the charge row
+cannot be edited. `count = 0` means recording a status can never move a cap.
+Rows written before this ADR carry no `kind` and read as charges, which is what
+they were.
+
+**Consequences.** The ledger file roughly doubles in rows, and `spent()` reads
+the whole file per charge, so the pre-charge read cost roughly doubles with it
+— measured at well under the 6.0 s pacing interval, and the price of being able
+to tell a served request from a refused one. `Ledger.statuses()` reports
+per-source status tallies per day. Five tests pin the branches: a 429 is not
+end-of-feed, a served empty page is, a truncated sweep is visible in the
+lifecycle log, a truncated sweep still writes what it read, and a settle row
+never inflates the cap.
+
+## ADR-018: The manual collector script refuses to start alongside the systemd units
+
+**Date:** 2026-08-18 · **Status:** accepted · closes the gap ADR-014 left open
+
+**Context.** ADR-014 made the systemd user units the production mechanism and
+recorded `scripts/run_collectors.sh` as "a manual/dev tool ... no longer the
+production mechanism." **It did not stop the script, and a declaration is not a
+mechanism.** Both ran concurrently from **2026-08-18T04:20:35Z** — two `start`
+markers four seconds apart — until stopped: **two watchers against one source,
+a doubled request rate, and ~3 s effective spacing** against a source measured
+to return HTTP 429 at that spacing. A.5 found it only because the lifecycle log
+carried 12 byte-identical duplicate heartbeats.
+
+The cohort survived it: manifests deduplicate by pool on read, so no birth was
+double-counted, and no sweep was truncated. The costs were budget and the
+raised probability of the ADR-017 defect firing.
+
+**Decision.** The script refuses to `start` or run `daily` while any of
+`solattn-watch.service`, `solattn-collect.service` or `solattn-daily.timer` is
+active. The refusal names the arithmetic and the measured cost, states that
+nothing was started and nothing was written, prints the exact command to stop
+the units, and exits 3 — the same refusal discipline the ledger uses. It is
+overridable by `SOLATTN_ALLOW_ALONGSIDE_SYSTEMD=1`, deliberately: a guard with
+no explicit override gets worked around rather than obeyed.
+
+`status` now reports the systemd units first, because reporting only this
+script's pidfiles printed "not running" while the collectors were in fact
+running under systemd — the misreading that let the collision persist.
+
+**Consequences.** The collision cannot recur on the next manual restart without
+an explicit override. Five tests pin the guard against a PATH-shimmed
+`systemctl`; the non-refusing paths are exercised through `status` so the test
+suite can never launch a real collector. The guard is a no-op on a machine with
+no `systemctl`, so the script still works as a dev tool where systemd is absent.

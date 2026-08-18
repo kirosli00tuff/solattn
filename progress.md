@@ -85,6 +85,204 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Amendment 5 — the enumeration miss registered, the 429 path made loud — 2026-08-18
+
+*ETAs (30–40 / 35–45 / 10–15 / 20–25 min) held. `make lint`, `make typecheck`,
+`make test` green: **135 tests**, up from 114, all three gates in **1.11 s**.
+**No cohort outcome was read, fetched or inspected**: `data/outcomes/` still
+holds only `benchmark-sol.jsonl`, no `candles-*.jsonl` exists for any pool, and
+the first checkpoint fires **2026-08-26**. This lands 8 days ahead of it.*
+
+### Task 1 — the instrument registered as it actually is
+
+**Amendment 5** is appended to `REGISTRATION.md`, with **ADR-016**. §1's claim
+that membership "is decided by birth and by nothing else" is now qualified in
+the registration itself rather than in a discussion section written after a
+result is read.
+
+**The distinction the amendment turns on, stated precisely: the selection rule
+is unchanged and remains true.** No mention count, engagement figure, listing,
+trending page, archive or "top coins" surface participates in enumeration, and
+none ever did. What A.5 measured is that the **realised** cohort is additionally
+thinned by an instrument artefact — a paced reader that cannot keep up with the
+feed — and that the thinning is **correlated with birth rate**. A reader of §1
+would otherwise take the enumerated cohort to be the birth-ordered population.
+It is a **non-uniform sample** of it.
+
+Registered, with its figures: the **28–35%** miss bound; both routes (gap
+integration 34.7%, the feed's own in-window rate 27.8%) and their **10.6%**
+agreement; **401 of 884** sweep pairs with zero overlap; **70.4%** coverage;
+the **8.7% / 65.0%** time-of-day spread; the **8.3×** burst-quintile
+concentration; and the **75.4% between-sweep / 24.6% within-sweep** split,
+which bounds what a cadence change can fix.
+
+**Registered as a lower bound on both routes, with the reason**, so it cannot
+later be quoted bare as a point estimate: route B measures the birth rate only
+during *covered* time, and covered time is biased toward quiet periods, so it
+understates the rate; route A prices each gap from the page windows bracketing
+it, and those are by construction slower than the gap, which opened precisely
+because the feed outran the reader. **Both routes err in the same direction,
+toward under-stating the miss.**
+
+**The direction, registered in the Amendment 2 and 3 pattern.** Pools born
+during bursts are systematically less likely to be enumerated. Bursts in pool
+creation are periods of elevated market-wide activity — the same latent
+condition under which social attention is heaviest — so the cohort
+**under-samples exactly the periods where the predictor has its largest values
+and its largest variance**. Under-sampling the high end of the predictor
+**biases the measured association toward the null**. Therefore **a negative
+carries a declared under-detection caveat and must not be read as evidence that
+attention does not predict outcomes, and a positive is not inflated by this
+weakness.** Same direction as Amendment 2's caveat, opposite to Amendment 3's;
+all three stand and none cancels another.
+
+**Not attention-driven selection, and the amendment says so.** No attention
+surface touches enumeration. This is selection on a variable *correlated* with
+attention — a weaker but real threat, and exactly what §5's survivorship audit
+exists to expose. It does not void the registration under §9: source, ordering
+rule and denylist are unchanged.
+
+**The reporting requirement, first-class and not a footnote.** Every result, at
+every horizon, carries the miss rate with its bound and its lower-bound status,
+its non-uniformity, and its n — alongside the survivorship audit §5 already
+requires. **A result that omits these is not reportable.**
+
+Seven new pins in `tests/test_registration.py` make deleting any of it break
+the build, including that `len(LAUNCHPAD_DEXES) == 16` — **`meteora-dbc` was
+NOT added**, since that choice was not made.
+
+### Task 2 — the rate-limit path now refuses instead of ending quietly
+
+**The defect (ADR-017).** `fetch_new_pools` returned `[]` on any non-2xx and
+`sweep_once` read a falsy page as end-of-feed, so a 429 truncated the sweep with
+**no refusal marker and no error marker**, recording a short read as a complete
+one. Same absent-data versus measured-absence shape ADR-012 fixed on the OHLCV
+path in A.3, left live on enumeration. The ledger could not have surfaced it
+either: it charges *before* sending and never recorded the status, which is why
+A.5 had to re-probe the live source to learn the limiter fires at all.
+
+**Stated precisely, because it changes what this fix is: the defect never
+fired.** All **887 of 887** collected sweeps recorded `pages_read = 4` and
+`pools_seen = 80` — zero truncated sweeps, zero pool-slots lost. The 429s were
+provoked by a probe adding a third client alongside the two watchers of Task 3.
+**This closes a latent defect; it does not repair lost data, and no collected
+figure changes.**
+
+**The fix.** `fetch_new_pools` returns `None` when the source did not answer and
+`[]` when it answered with no rows. `sweep_once` branches on the difference:
+
+| page outcome | meaning | what the sweep does |
+|---|---|---|
+| `None` (429 / 5xx / transport) | **no answer** | writes an **error** marker naming the page, counts `pages_unavailable`, sets `truncated`, stops — explicitly *not* end-of-feed |
+| `[]` (2xx, no rows) | **measured absence** | ends the sweep, no marker — a served empty page really is the end |
+| rows | data | continues |
+
+`truncated` and `pages_unavailable` ride on every heartbeat, so a retrospective
+finds truncated sweeps in the log without re-probing the source. **A truncated
+sweep still writes the pages that were served** — refusing loudly must not
+discard good data.
+
+**The ledger records the status**, as an append-only **settle row** carrying
+`count = 0`. The charge is priced before the request is sent and the ledger is
+append-only, so the status cannot go on the charge row and the charge row
+cannot be edited; `count = 0` means recording a status can never move a cap.
+Pre-ADR-017 rows carry no `kind` and read as charges, which is what they were.
+`Ledger.statuses()` reports per-source, per-day status tallies. Cost, stated:
+the ledger roughly doubles in rows and `spent()` reads the whole file per
+charge, so that read cost roughly doubles — measured well inside the 6.0 s
+pacing interval.
+
+**Nine tests**, one per branch: a 429 is not end-of-feed; a served empty page
+is; a truncated sweep is visible in the lifecycle log; a truncated sweep still
+writes what it read; a settle row never inflates the cap; a settle row is
+appended and never edited; and a legacy row with no `kind` still prices against
+the cap.
+
+**The fix is live, not merely committed.** A fix sitting in git while the old
+code runs is the exact error ADR-014 and ADR-018 record, so the units were
+restarted and the new schema verified in production:
+
+```
+{"at":"2026-08-18T06:03:03Z","marker":"heartbeat","pages_read":4,
+ "pages_unavailable":0,"truncated":0,"pools_seen":80,...}
+ledger row kinds: {legacy(no kind): 40351, charge: 19, settle: 18}
+settled statuses: {geckoterminal HTTP 200: 4, farcaster HTTP 200: 10, farcaster HTTP 400: 4}
+```
+
+### Task 3 — one watcher, one collector, and a guard so it stays that way
+
+**Confirmed after restart at 2026-08-18T06:02:44Z:**
+
+| | pid | unit | state |
+|---|---|---|---|
+| watcher | **298813** | `solattn-watch.service` | active (MainPID 298803) |
+| collector | **298836** | `solattn-collect.service` | active |
+| daily pass | — | `solattn-daily.timer` | active, waiting, next 2026-08-19 00:40 UTC |
+
+**No shell-loop process remains**, and this script's three `.pid` files are
+gone. Exactly one process per role.
+
+**What A.4 got wrong, recorded plainly (ADR-018).** ADR-014 declared
+`scripts/run_collectors.sh` "a manual/dev tool ... no longer the production
+mechanism" — **and did not stop it. A declaration is not a mechanism.** Both
+ran concurrently from **2026-08-18T04:20:35Z** (two `start` markers four seconds
+apart) until stopped. The cost: **a doubled request rate**, and **~3 s effective
+spacing** against a source measured to return HTTP 429 at that spacing — which
+is what made the ADR-017 defect likely to fire. The cohort survived it:
+manifests deduplicate by pool on read, so no birth was double-counted and no
+sweep was truncated. It was found only because the lifecycle log carried 12
+byte-identical duplicate heartbeats.
+
+**The guard.** The script now refuses to `start` or run `daily` while any of the
+three units is active. It names the arithmetic and the measured cost, states
+that nothing was started and nothing was written, prints the exact stop command,
+and exits 3 — the same refusal discipline the ledger uses. It is overridable by
+`SOLATTN_ALLOW_ALONGSIDE_SYSTEMD=1`, deliberately: a guard with no explicit
+override gets worked around rather than obeyed. **Verified against the real
+live units**, which refused and started nothing.
+
+`status` now reports the systemd units *first*. Reporting only this script's
+pidfiles printed "not running" while the collectors were in fact running under
+systemd — the misreading that let the collision persist unnoticed.
+
+Five tests pin the guard against a PATH-shimmed `systemctl`; the non-refusing
+paths are exercised through `status`, so the test suite can never launch a real
+collector.
+
+### Two things the new instrumentation surfaced immediately
+
+Both are **recorded, not fixed** — neither is a registered rule and neither was
+in this stage's scope.
+
+1. **The feed head has been frozen since `2026-08-18T04:46:53Z` — 61.7 minutes
+   across 29 sweeps**, `new_births = 0`, `pools_seen = 80`, HTTP **200**
+   throughout. This is the vendor serving valid but stale pages: a **third**
+   absence shape, distinct from both a 429 and a served-empty page, and one the
+   new branch handles correctly (no truncation, no false end-of-feed). It is a
+   live enumeration gap and is **not** the miss shape Amendment 5 registers —
+   that one is a reader too slow for the feed, this one is a feed that stopped.
+   73 of 920 sweeps have `new_births == 0` overall.
+2. **Farcaster returns HTTP 400 on `tail shard 0`**, repeatedly. Previously
+   invisible — the ledger recorded 400s and 200s identically. Farcaster is
+   still collecting (95 rows in the 05:00Z hour, 11 by 06:03Z), so these are
+   partial failures inside a working collector, not an outage.
+
+### The trial grid is unchanged, and this amendment adds no trial
+
+**160 cells** — horizons {1,3,7,30} × statistics {v24,v1,v6,ua24,accel} ×
+match sets {mint-exact, mint+cashtag} × series {bluesky, farcaster, telegram,
+pooled} — with **Šidák α_adj = 1 − (1 − 0.05)^(1/160) = 0.000321**, and the
+primary trial still `(h = 7d, v24, mint-exact, bluesky)` read at α = 0.05.
+Pinned in `tests/test_registration.py` alongside the death floor, cost band,
+entry anchor, channel-list size and the 16-member launch-venue denylist, so
+none of them can drift.
+
+### Maturity dates — unchanged
+
+**2026-08-27** (7-day analysis), **2026-09-19** (30-day).
+
+---
+
 ## Stage A.5 — the enumeration miss rate measured, the real choice sized — 2026-08-18
 
 *ETAs (30–40 / 10–15 / 20–30 / 20–30 min) held; Task 4 was re-quoted down to

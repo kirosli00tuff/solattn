@@ -893,3 +893,143 @@ Amendment 2's under-detection caveat.
 **No bar moves.** The grid stays at **160** cells with **α_adj = 0.000321**,
 the horizons, death floor, cost band, matching rules, channel list and
 statistics are untouched, and this amendment adds no trial.
+
+### Amendment 5 — 2026-08-18 — the enumeration is incomplete, and the incompleteness is not random
+
+**What data existed when this amendment was made.** **No cohort outcome
+existed, and none was read, fetched, or inspected while drafting.**
+`data/outcomes/` contained exactly one file, `benchmark-sol.jsonl`, the SOL
+benchmark leg; no `candles-*.jsonl` existed for any pool; the first outcome
+checkpoint fires **2026-08-26**. What existed was **enumeration telemetry
+only**: 55,715 birth rows across three daily manifests, 2,459 lifecycle rows,
+and 38,742 ledger rows, frozen as a snapshot at **2026-08-18T04:49:43Z** and
+measured in Stage A.5. This amendment therefore describes the **instrument**,
+strictly before any forward return could inform the description — which is the
+ordering §4 exists to protect.
+
+**Why this is an amendment and not a discussion note.** §1 states that
+membership "is decided by birth and by nothing else." **The selection rule is
+unchanged and remains true: no mention count, engagement figure, listing,
+trending page, archive or "top coins" surface participates in enumeration, and
+none ever did.** What A.5 measured is that the *realised* cohort is additionally
+thinned by an instrument artefact — a paced reader that cannot keep up with the
+feed — and that the thinning is **correlated with birth rate**. A reader of §1
+would otherwise take the enumerated cohort to be the birth-ordered population.
+It is a **non-uniform sample** of it. That belongs in the registration, before
+any result is read, rather than in the discussion afterward.
+
+**The measured miss.** Measured mechanically from the feed's own ordering: the
+watcher keeps a cursor at the newest `pool_created_at` already written and
+treats as fresh only what is strictly newer, so a sweep reporting
+`new_births == pools_seen` **proves** that every slot it read was created after
+the previous sweep's newest — that the two reads did not overlap, and that the
+interval between them was never read.
+
+| quantity | measured |
+|---|---|
+| consecutive sweep pairs with **zero overlap** | **401 of 884 = 45.4%** |
+| feed time elapsed inside continuous watcher runs | 34.50 h |
+| feed time actually read (union of per-page windows) | 24.28 h |
+| **coverage** | **70.4%** |
+| **feed time never read** | **29.6%**, in 1,290 proven-uncovered gaps |
+| gap length p10 / p50 / p90 / max | 2 s / 10 s / 65 s / 667 s |
+
+**The miss rate, bounded by two independent routes:**
+
+| route | implied true full-feed rate | miss rate |
+|---|---|---|
+| **A** — integrate each proven gap at the feed rate measured locally in the page windows bracketing it | 43,497/day | **34.7%** |
+| **B** — the feed's own in-window birth rate, time-weighted, independent of any gap model | 39,326/day | **27.8%** |
+| enumerated, for comparison | 28,385/day | — |
+
+**The two routes agree within 10.6%. The registered figure is a miss rate of
+28 to 35 percent**, ≈ 21,700 births never enumerated over 34.5 h, of which
+≈ 4,000 were `amm`.
+
+**The estimate is a LOWER BOUND on both routes, and the reason is registered
+here so it is not discovered later as a convenience.** Route B measures the
+birth rate only during *covered* time, and covered time is biased toward quiet
+periods (see the concentration below), so it understates the true rate and
+therefore the miss. Route A prices each gap at the rate of the page windows
+that bracket it, and those windows are by construction slower than the gaps
+they surround — a gap opens precisely because the feed outran the reader. Both
+routes therefore err in the same direction, toward **under**-stating the miss.
+Neither is a point estimate to be quoted bare.
+
+**Where the miss falls.** **75.4% in gaps between sweeps, 24.6% in holes
+between pages of a single sweep.** The second figure is registered because it
+bounds what a cadence change can fix: even an infinitely fast sweep cadence
+leaves roughly a quarter of the miss in place. A live probe measured a
+13-second hole between page 2 and page 3 of a single 4-page walk, so the feed
+**skips across pages as well as duplicating**; coverage is therefore computed
+from per-page windows, never per-sweep windows.
+
+**The miss is NOT uniform thinning, which is the part that matters.**
+
+By time of day, the miss rate spans **8.7% at 07:00 UTC to 65.0% at 16:00 UTC
+— a 56-point spread and a 7.4× ratio**. By burst intensity, with the
+proven-uncovered gaps split into quintiles by the feed rate measured at the
+gap:
+
+| quintile of feed rate at the gap | gaps | feed rate | share of all missed births |
+|---|---|---|---|
+| Q1 slowest | 259 | 29,077/day | 5.4% |
+| Q2 | 258 | 37,023/day | 9.6% |
+| Q3 | 257 | 44,941/day | 17.7% |
+| Q4 | 258 | 51,967/day | 22.1% |
+| **Q5 fastest** | 258 | 62,666/day | **45.2%** |
+
+**The fastest birth-rate quintile carries 8.3× the missed births of the
+slowest, on the same number of gaps.**
+
+**The direction, stated now rather than in the discussion later**, in the
+pattern of Amendments 2 and 3. **Pools born during bursts are systematically
+less likely to be enumerated.** Bursts in pool creation are periods of elevated
+market-wide activity, which is the same latent condition under which social
+attention is heaviest. The cohort therefore **under-samples exactly the periods
+where the predictor has its largest values and its largest variance**, and
+under-sampling the high end of the predictor **biases the measured association
+toward the null**. Therefore: **a negative result carries a declared
+under-detection caveat and must not be read as evidence that attention does not
+predict outcomes; and a positive result is not inflated by this weakness, since
+the bias runs the other way.** This runs in the **same** direction as
+Amendment 2's under-detection caveat and the **opposite** direction from
+Amendment 3's `no_exit_candle` caveat; all three stand, and none cancels
+another.
+
+**Stated precisely, because the distinction is load-bearing: this is not
+attention-driven selection.** No attention surface touches enumeration. It is
+selection on a variable *correlated* with attention, which is a weaker but real
+threat, and it is exactly the mechanism §5's survivorship audit exists to
+expose. It does not void the registration under §9 — the enumeration source,
+ordering rule and denylist are unchanged — but it is a permanent, declared
+property of this cohort.
+
+**The reporting requirement, registered as a first-class output and not a
+footnote.** Every result in this repository, **at every horizon**, reports
+alongside the survivorship audit §5 already requires:
+
+1. the **enumeration miss rate** with its 28–35% bound, both routes, and the
+   statement that it is a lower bound;
+2. its **non-uniformity** — the 8.7%/65.0% time-of-day spread and the 8.3×
+   burst-quintile concentration — because a uniform 30% thinning would cost
+   power and nothing else, and this is not uniform;
+3. the **n** of the cohort the result rests on, in the same sentence as the
+   number, per the standing rule that a negative with a hidden n is not a
+   result.
+
+A result that omits these is not reportable. No table, figure or sentence
+carrying a cohort return may appear without them.
+
+**The operator's chosen response is option D — accept documented incomplete
+enumeration on the free tier.** A.5 priced complete enumeration at
+9,500–14,100 watcher requests/day and the combined budget at 26,330/day, which
+only the Lite tier ($499/mo) clears; Analyst at 16,438/day is 61% short. Option
+D fits the measured 14,400/day pacing capacity with a 1% margin. **The
+documentation this option requires is this amendment.**
+
+**No bar moves.** The grid stays at **160** cells with **α_adj = 0.000321**,
+and **this amendment adds no trial**. The universe rule, source, ordering,
+launch-venue denylist, horizons, death floor, cost band, matching rules,
+channel list, attention windows and statistics are all untouched. Nothing
+collected changes, and nothing already collected is discarded or reweighted.

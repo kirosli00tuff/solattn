@@ -95,6 +95,7 @@ class PacedClient:
             raw = self._client.get(url, params=params)
         except httpx.HTTPError as exc:
             self._last_sent[source] = time.monotonic()
+            self._ledger.settle(source, 0, note or url)
             return Response(
                 status=0,
                 elapsed_s=time.monotonic() - started,
@@ -104,6 +105,7 @@ class PacedClient:
             )
         self._last_sent[source] = time.monotonic()
         elapsed = time.monotonic() - started
+        self._ledger.settle(source, raw.status_code, note or url)
         body: Any | None
         try:
             body = raw.json()

@@ -207,3 +207,66 @@ def test_amendment_3_did_not_move_the_grid_or_any_other_bar() -> None:
     assert registry.ENTRY_OFFSET_DAYS == 2
     assert registry.COST_BPS_CENTRAL == 450
     assert DOC.index("Amendment 3") > DOC.index("Amendment 2")
+
+
+# --- Amendment 5: the enumeration miss --------------------------------------
+
+
+def test_amendment_5_registers_the_measured_miss_with_both_routes() -> None:
+    assert registry.ENUMERATION_MISS_LOW == 0.278
+    assert registry.ENUMERATION_MISS_HIGH == 0.347
+    assert registry.ENUMERATION_COVERAGE == 0.704
+    assert "a miss rate of 28 to 35 percent" in DOC
+    assert "The two routes agree within 10.6%" in DOC
+    assert "**401 of 884 = 45.4%**" in DOC
+
+
+def test_amendment_5_registers_the_estimate_as_a_lower_bound() -> None:
+    """A bound quoted bare as a point estimate is the failure this prevents."""
+    assert "LOWER BOUND on both routes" in DOC
+    assert "Both routes therefore err in the same direction, toward **under**-stating" in DOC
+
+
+def test_amendment_5_registers_the_non_uniformity() -> None:
+    """Uniform thinning costs power; non-uniform thinning damages the claim."""
+    assert registry.MISS_RATE_QUIETEST_HOUR == 0.087
+    assert registry.MISS_RATE_BUSIEST_HOUR == 0.650
+    assert registry.MISS_BURST_QUINTILE_RATIO == 8.3
+    assert "8.7% at 07:00 UTC to 65.0% at 16:00 UTC" in DOC
+    assert "8.3× the missed births of the slowest" in DOC
+
+
+def test_amendment_5_registers_where_the_miss_falls() -> None:
+    """The within-sweep share bounds what a cadence change can fix."""
+    assert registry.MISS_SHARE_BETWEEN_SWEEPS == 0.754
+    assert registry.MISS_SHARE_WITHIN_SWEEP == 0.246
+    assert round(registry.MISS_SHARE_BETWEEN_SWEEPS + registry.MISS_SHARE_WITHIN_SWEEP, 3) == 1.0
+    assert "skips across pages as well as duplicating" in DOC
+
+
+def test_amendment_5_registers_the_bias_direction_toward_the_null() -> None:
+    """Registered before any outcome, so it cannot be produced afterwards."""
+    assert "Pools born during bursts are systematically less likely to be enumerated" in DOC
+    assert "biases the measured association toward the null" in DOC
+    assert "a positive result is not inflated by this weakness" in DOC
+    # It must NOT be mistaken for attention-driven selection.
+    assert "this is not attention-driven selection" in DOC
+
+
+def test_amendment_5_registers_the_per_result_reporting_requirement() -> None:
+    assert "A result that omits these is not reportable" in DOC
+    assert "alongside the survivorship audit §5 already requires" in DOC
+
+
+def test_amendment_5_did_not_move_the_grid_or_any_other_bar() -> None:
+    """The whole point: the instrument described honestly without touching a bar."""
+    assert registry.TRIAL_GRID_SIZE == 160
+    assert round(registry.SIDAK_ALPHA, 6) == 0.000321
+    assert registry.PRIMARY_TRIAL == (7, "v24", "mint-exact", "bluesky")
+    assert registry.DEATH_LOOKBACK_DAYS == 14
+    assert registry.COST_BPS_CENTRAL == 450
+    assert registry.ENTRY_OFFSET_DAYS == 2
+    assert registry.CHANNEL_LIST_SIZE == 20
+    assert len(registry.LAUNCHPAD_DEXES) == 16  # meteora-dbc was NOT added
+    assert "this amendment adds no trial" in DOC
+    assert DOC.index("Amendment 5") > DOC.index("Amendment 4")

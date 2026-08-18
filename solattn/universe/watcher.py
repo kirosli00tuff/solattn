@@ -38,14 +38,32 @@ def sweep_once(client: PacedClient, clock: Clock, settings: Settings) -> dict[st
 
     collected = []
     pages_read = 0
+    pages_unavailable = 0
+    truncated = False
     for page in range(1, registry.WATCH_PAGES_PER_SWEEP + 1):
         try:
             births = geckoterminal.fetch_new_pools(client, clock, page)
         except RequestCapError as refusal:
-            life.refused(str(refusal), page=page)
+            life.refused(str(refusal), page=page, pages_read=pages_read)
+            truncated = True
+            break
+        if births is None:
+            # The source did not answer (429/5xx/transport). That is NOT the
+            # end of the feed, and it must never be recorded as one: the sweep
+            # stops short, says so, and is counted as truncated (ADR-017).
+            life.errored(
+                "new_pools unavailable (non-2xx or transport); sweep TRUNCATED, "
+                "not end-of-feed. Pages after this one were not read.",
+                page=page,
+                pages_read=pages_read,
+            )
+            pages_unavailable += 1
+            truncated = True
             break
         pages_read += 1
         if not births:
+            # A 2xx answer with no rows IS the end of the feed: measured
+            # absence, not absent data.
             break
         collected.extend(births)
 
@@ -63,6 +81,8 @@ def sweep_once(client: PacedClient, clock: Clock, settings: Settings) -> dict[st
     amm = sum(1 for b in fresh if b.venue_class == registry.VENUE_CLASS_AMM)
     summary: dict[str, Any] = {
         "pages_read": pages_read,
+        "pages_unavailable": pages_unavailable,
+        "truncated": int(truncated),
         "pools_seen": len(collected),
         "new_births": len(fresh),
         "new_amm": amm,

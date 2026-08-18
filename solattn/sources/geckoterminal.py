@@ -82,8 +82,19 @@ def parse_new_pools(body: Any, source_url: str, retrieved_at: str) -> list[PoolB
     return births
 
 
-def fetch_new_pools(client: PacedClient, clock: Clock, page: int = 1) -> list[PoolBirth]:
-    """Fetch one page of the birth-ordered new-pools feed."""
+def fetch_new_pools(client: PacedClient, clock: Clock, page: int = 1) -> list[PoolBirth] | None:
+    """Fetch one page of the birth-ordered new-pools feed.
+
+    Returns ``None`` when the source was unavailable (non-2xx or transport
+    error) and ``[]`` when it answered 2xx with no rows. **The two are
+    different facts** and the caller must not conflate them: an empty list is
+    the end of the feed, whereas ``None`` is no answer at all.
+
+    This is ADR-012's absent-data versus measured-absence split, applied to the
+    enumeration path. Returning ``[]`` on a 429 let the rate limiter read as
+    "the feed ends here", which truncated a sweep silently — no refusal marker,
+    no error marker, and a shorter read recorded as a complete one (ADR-017).
+    """
     url = registry.GECKOTERMINAL_BASE + registry.NEW_POOLS_PATH
     response = client.get(
         SOURCE,
@@ -92,7 +103,7 @@ def fetch_new_pools(client: PacedClient, clock: Clock, page: int = 1) -> list[Po
         note=f"new_pools page={page}",
     )
     if not response.ok:
-        return []
+        return None
     return parse_new_pools(response.json_body, response.url, iso(clock.now()))
 
 

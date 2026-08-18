@@ -63,6 +63,31 @@ EXPECTED_LAUNCHPAD_POOLS_PER_DAY: Final = 7450
 #: averaged away, and never authorizes editing the denylist mid-collection.
 RATE_DISAGREEMENT_FACTOR: Final = 2.0
 
+#: The MEASURED enumeration miss (REGISTRATION.md Amendment 5, Stage A.5,
+#: snapshot 2026-08-18T04:49:43Z). The selection rule is unchanged - no
+#: attention surface touches enumeration - but the realised cohort is thinned
+#: by a paced reader that cannot keep up with the feed, and the thinning is
+#: correlated with birth rate. Both bounds are LOWER bounds: route B measures
+#: the birth rate only during covered time (biased toward quiet periods) and
+#: route A prices each gap from the slower windows bracketing it.
+ENUMERATION_MISS_LOW: Final = 0.278
+ENUMERATION_MISS_HIGH: Final = 0.347
+#: Union of the per-page read windows over elapsed feed time. Per-page, not
+#: per-sweep: a live probe measured a 13 s hole between pages 2 and 3 of one
+#: walk, so the feed skips across pages as well as duplicating.
+ENUMERATION_COVERAGE: Final = 0.704
+#: The non-uniformity, which is the part that damages the birth-ordered claim.
+#: A uniform miss would cost power and nothing else.
+MISS_RATE_QUIETEST_HOUR: Final = 0.087  # 07:00 UTC
+MISS_RATE_BUSIEST_HOUR: Final = 0.650  # 16:00 UTC
+#: Missed births in the fastest birth-rate quintile over the slowest, on the
+#: same number of proven-uncovered gaps.
+MISS_BURST_QUINTILE_RATIO: Final = 8.3
+#: Where the miss falls. The within-sweep share bounds what a cadence change
+#: can fix: an infinitely fast cadence leaves roughly a quarter in place.
+MISS_SHARE_BETWEEN_SWEEPS: Final = 0.754
+MISS_SHARE_WITHIN_SWEEP: Final = 0.246
+
 # --- The attention metric (REGISTRATION.md 2) -------------------------------
 ATTENTION_WINDOW_HOURS: Final = 24
 ATTENTION_SUBWINDOW_HOURS: Final[tuple[int, ...]] = (1, 6, 24)
