@@ -408,3 +408,70 @@ cost accepted: `carry_forward` will sometimes look better than the primary, and
 this registration forbids reporting it as the result anyway — which is the
 point, and `tests/test_registration.py` pins that constraint's text along with
 the grid size and the Šidák level.
+
+## ADR-014: The collectors run under systemd user units, not a supervised shell loop
+
+**Date:** 2026-08-18 · **Status:** accepted · corrects a defect recorded in Stage A.1
+
+**Context.** A.1 reported the daily pass as "scheduled" and listed it as a
+"third supervised component". **That was wrong, and the error is the point of
+this ADR:** what existed was a `nohup`'d `while true` loop in
+`scripts/run_collectors.sh`, owned by a shell whose parent was a session. There
+was **no crontab entry and no systemd unit** — nothing that survives a logout,
+a reboot, or the parent exiting. On 2026-08-18 the loops stopped at
+02:43–02:44Z with clean lifecycle stop markers and nothing restarted them:
+**1h35m of watcher downtime and 1h37m of collector downtime** before it was
+noticed. In a forward-recorded cohort that gap is unrecoverable, which is
+exactly the failure ADR-003 was written to avoid on the request side.
+
+**Decision.** Persistence moves to **systemd user units**:
+`solattn-watch.service` (`Restart=on-failure`), `solattn-collect.service`
+(`Restart=always` — `collect` exits normally after each bounded cycle, so
+systemd *is* the loop), and `solattn-daily.timer` → `solattn-daily.service`
+(`OnCalendar=*-*-* 00:40:00 UTC`, **`Persistent=true`** so a run missed while
+the machine was off fires on next boot). All are `enable`d into
+`default.target` / `timers.target`, and **lingering is on**, so they start at
+boot and survive logout. `run_collectors.sh` remains as a manual/dev tool and
+is no longer the production mechanism.
+
+**Consequences.** The schedule now survives the failure that actually happened.
+`Persistent=true` proved itself immediately: enabling the timer fired the
+missed 00:40Z daily pass at once, self-healing a run that the shell loop had
+simply lost. Two safeguards now overlap by design — the timer's `Persistent`
+and the checkpoint catch-up window (ADR-012's `due_days`) — and the redundancy
+is deliberate, because a missed outcome checkpoint cannot be recovered after
+the vendor's trailing history window closes. **A claim that something is
+"scheduled" now means a unit file exists**, and this ADR is the standing
+reminder that the previous claim did not.
+
+## ADR-015: A mention retrieved from history is not forward attention
+
+**Date:** 2026-08-18 · **Status:** accepted · implements REGISTRATION.md Amendment 4
+
+**Context.** Telegram's first MTProto connect backfilled **123,225 rows posted
+before collection began**, oldest 2022-01-06, because MTProto serves channel
+history on connect. Bluesky and Farcaster, being firehoses, backfilled 0 and 14
+respectively. Measured against the registered window rule, **0 of the 27,577
+cohort-attributed pre-collection rows landed inside any `[T0, T0+24h]`
+window** — the metric reads `posted_at` and already guards `offset < 0`, so
+none of them were ever counted.
+
+**Decision.** Register the exclusion **explicitly anyway**. The metric's
+immunity was a property of the window arithmetic, not a stated rule, and this
+project's standing discipline is that **an implementation accident is not a
+rule** — a later cadence change, an anchor change, or a source whose backfill
+postdates a pool's birth would silently turn it into contamination. A mention
+whose `posted_at` precedes its **source's registered collection start** is
+excluded, uniformly, because the registered construct is *forward* attention
+velocity: a message retrieved from history was not observed as it happened, and
+history is available deeply for Telegram, not at all for the firehoses, and
+therefore unevenly across sources and pools.
+
+**Consequences.** Telegram loses 123,225 stored rows from the metric (96.8% of
+its rows; they remain on disk, excluded at computation rather than deleted),
+Bluesky 0, Farcaster 14 — and **no counted figure changes**, because none were
+counted. A pool whose window opens before a source's start now gets visibly
+partial coverage from that source rather than backfill-filled coverage; the
+direction is toward the null for those pools. The rule is keyed on a per-source
+constant, and a source without one excludes nothing, so adding a source cannot
+silently drop its rows.

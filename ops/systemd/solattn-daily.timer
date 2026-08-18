@@ -1,0 +1,13 @@
+[Unit]
+Description=solattn daily pass at 00:40 UTC
+Documentation=file:///home/kiros-li/Documents/GitHub/solattn/REGISTRATION.md
+
+[Timer]
+OnCalendar=*-*-* 00:40:00 UTC
+# Persistent: a run missed while the machine was off fires on next boot. It
+# complements the checkpoint catch-up window rather than replacing it.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

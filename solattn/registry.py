@@ -114,6 +114,20 @@ ATTENTION_SOURCES: Final[tuple[str, ...]] = (
     SOURCE_BLUESKY,
 )
 
+#: MEASURED first-ingest instant per source (REGISTRATION.md Amendment 4).
+#: A mention posted BEFORE its source's collection start is excluded from the
+#: attention metric: the registered construct is forward attention velocity
+#: during the launch window, and a message posted before collection began was
+#: retrieved from history rather than observed, which is a different
+#: instrument. Telegram's first MTProto connect backfilled 123,225 such rows
+#: (oldest 2022-01-06); Bluesky and Farcaster are live firehoses and have
+#: essentially none.
+COLLECTION_START: Final[dict[str, str]] = {
+    SOURCE_TELEGRAM: "2026-08-17T04:28:21Z",
+    SOURCE_BLUESKY: "2026-08-16T16:30:23Z",
+    SOURCE_FARCASTER: "2026-08-16T16:29:50Z",
+}
+
 # --- Horizons, bars and returns (REGISTRATION.md 4) -------------------------
 #: Entry is the close of the daily candle for d0 + ENTRY_OFFSET_DAYS, which
 #: opens strictly after the attention window closes for every time-of-day of

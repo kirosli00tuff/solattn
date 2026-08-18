@@ -1,0 +1,18 @@
+[Unit]
+Description=solattn attention collectors (bluesky, farcaster, telegram)
+Documentation=file:///home/kiros-li/Documents/GitHub/solattn/REGISTRATION.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kiros-li/Documents/GitHub/solattn
+Environment=PATH=/home/kiros-li/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/kiros-li/.local/bin/uv run python -m solattn.cli collect --seconds 300
+# `collect` exits normally after its bounded cycle, so Restart=always is the
+# loop: systemd owns the cadence instead of a shell `while true` that dies
+# with its parent (the A.4 defect).
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=default.target

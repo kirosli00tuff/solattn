@@ -57,6 +57,26 @@ class AttentionStats:
         return float(getattr(self, name))
 
 
+def is_pre_collection(mention: Mention) -> bool:
+    """True when a mention was posted before its source's collection start.
+
+    REGISTRATION.md Amendment 4. The registered construct is **forward**
+    attention velocity during the launch window. A message posted before
+    collection began was *retrieved from history* rather than observed as it
+    happened - a different instrument, available deeply for Telegram (MTProto
+    backfills channel history on first connect) and not at all for the
+    firehoses, and therefore available unevenly across sources and across
+    pools. Excluding it is a registered rule, not a cleanup.
+
+    A source with no registered collection start excludes nothing, so adding a
+    source cannot silently drop its rows.
+    """
+    start = registry.COLLECTION_START.get(mention.source)
+    if start is None:
+        return False
+    return mention.posted_at < start
+
+
 def compute_stats(
     mint: str,
     born_at: datetime,
@@ -77,6 +97,9 @@ def compute_stats(
     authors: set[str] = set()
     for mention in mentions:
         if mention.matched_mint != mint or mention.match_kind not in kinds:
+            continue
+        if is_pre_collection(mention):
+            # Amendment 4: retrieved from history, not observed forward.
             continue
         posted = parse_iso(mention.posted_at)
         offset = posted - born_at

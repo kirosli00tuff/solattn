@@ -1,0 +1,17 @@
+[Unit]
+Description=solattn birth-ordered universe watcher
+Documentation=file:///home/kiros-li/Documents/GitHub/solattn/REGISTRATION.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kiros-li/Documents/GitHub/solattn
+Environment=PATH=/home/kiros-li/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/kiros-li/.local/bin/uv run python -m solattn.cli watch
+Restart=on-failure
+RestartSec=30
+# A gap in a forward-recorded cohort cannot be backfilled, so the watcher is
+# restarted on failure and started at boot rather than depending on a login.
+[Install]
+WantedBy=default.target

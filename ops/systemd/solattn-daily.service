@@ -1,0 +1,14 @@
+[Unit]
+Description=solattn daily pass (outcome checkpoints, counts, digest)
+Documentation=file:///home/kiros-li/Documents/GitHub/solattn/REGISTRATION.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kiros-li/Documents/GitHub/solattn
+Environment=PATH=/home/kiros-li/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=oneshot
+ExecStart=/home/kiros-li/.local/bin/uv run python -m solattn.cli checkpoint
+ExecStart=/home/kiros-li/.local/bin/uv run python -m solattn.cli counts
+ExecStart=/home/kiros-li/.local/bin/uv run python -m solattn.cli report

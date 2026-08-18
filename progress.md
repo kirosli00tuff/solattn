@@ -85,6 +85,139 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Stage A.4 — persistence, the backfill resolved, the saturation sized — 2026-08-18
+
+*ETAs (25–35 / 35–45 / 10–15 / 20–25 min) held. `make lint`, `make typecheck`,
+`make test` green (**114 tests**). No cohort outcome was read, fetched or
+inspected: `data/outcomes/` still holds only `benchmark-sol.jsonl`, and the
+first checkpoint fires 2026-08-26.*
+
+### Task 1 — the downtime, and the defect A.1 recorded as fixed when it was not
+
+**The collectors stopped and nothing restarted them.** Measured from the
+lifecycle log, marker to restart:
+
+| component | last marker | gap |
+|---|---|---|
+| collect (bluesky, farcaster, telegram) | 2026-08-18T02:43:03Z stop | **1h 37m** |
+| watcher (enumeration) | 2026-08-18T02:44:29Z stop | **1h 35m** |
+| checkpoints (daily pass) | 2026-08-18T00:40:00Z stop | **3h 40m** (its next run was due 00:40Z) |
+
+A `downtime` lifecycle marker was written per component before restarting, so
+the interruption reads as explained downtime with its cause rather than an
+unlogged hole.
+
+**Stated plainly, because it is the defect being fixed: Stage A.1 recorded the
+daily pass as "scheduled" and described it as a "third supervised component",
+and that was wrong.** What existed was a `nohup`'d `while true` loop owned by a
+shell whose parent was a session — **no crontab entry, no systemd unit,
+nothing that survives a logout, a reboot, or the parent exiting.** The stop
+markers were clean, which is precisely why the failure was quiet: every
+component shut down politely and simply never came back.
+
+**Persistence installed** as systemd user units, verified:
+
+| unit | state | schedule |
+|---|---|---|
+| `solattn-watch.service` | enabled, active | `Restart=on-failure`, boot-start |
+| `solattn-collect.service` | enabled, active | `Restart=always` — `collect` exits after each bounded cycle, so systemd *is* the loop |
+| `solattn-daily.timer` | enabled, active | `OnCalendar=*-*-* 00:40:00 UTC`, `Persistent=true`; next fire **2026-08-19 00:40 UTC** |
+| `solattn-daily.service` | static (timer-driven) | checkpoint → counts → report |
+
+`Linger=yes`, so the units survive logout and start at boot. **`Persistent=true`
+proved itself on installation**: enabling the timer immediately fired the
+missed 00:40Z pass, self-healing a run the shell loop had simply lost.
+`scripts/run_collectors.sh` remains a manual/dev tool and is no longer the
+production mechanism. Recorded as **ADR-014**.
+
+### Task 2 — the backfill: measured first, then registered
+
+**Which timestamp the windows use, read from the code rather than assumed:**
+`attention/metrics.py` computes `posted = parse_iso(mention.posted_at)`, then
+`offset = posted - born_at`, then `if offset < timedelta(0): continue`. The
+windows use **`posted_at`**, and mentions predating `T0` are already skipped.
+
+**The contamination surface, measured** by applying the registered window rule
+to every stored row against its matched mint's manifest birth:
+
+| | rows |
+|---|---|
+| telegram rows total | 127,286 |
+| posted before telegram collection started | **123,225** (oldest **2022-01-06**) |
+| pre-collection rows attributed to a cohort pool | **27,577** — mint **945**, cashtag **11,251**, name **15,381** |
+| **of those, landing inside a registered `[T0, T0+24h]` window** | **0** |
+| live-collected rows landing inside a window, for scale | 7,672 |
+
+**The metric was never contaminated.** Every pre-collection row predates the
+`T0` of every pool it matched. The 945 mint-exact pre-collection matches are
+not an anomaly and are worth understanding: **a token's mint predates its AMM
+pool**, so a genuine mention of the token can precede the pool birth this
+registration anchors on.
+
+**Registered anyway, as an explicit rule** (Amendment 4, ADR-015): a mention
+whose `posted_at` precedes its **source's registered collection start** is
+excluded from the attention metric, because the registered construct is
+*forward* attention velocity and a message retrieved from history was not
+observed as it happened. The immunity was a property of the window arithmetic,
+not a stated rule — and this project's discipline is that **an implementation
+accident is not a rule**.
+
+**Rows each source loses from the metric** (excluded at computation; nothing is
+deleted from disk): **telegram 123,225** (96.8% of its rows) · **bluesky 0** ·
+**farcaster 14**. **No counted figure changes**, because none were counted.
+
+Registered consequence: a pool whose window opens before a source's collection
+start now gets **visibly partial** coverage from that source rather than
+backfill-filled coverage — direction toward the null for those pools.
+
+**Two pre-existing tests failed when the rule landed, and that was the rule
+working**: their fixture birth date predated Bluesky's real collection start.
+The fixtures were corrected and the straddling-window edge is now pinned by its
+own test.
+
+### Task 3 — the saturation, sized against outcome-path capacity
+
+The watcher's saturation marker fired at **6,114.9 measured AMM births/day**
+against the registered 1,330 expectation — **4.60× the expectation** (report
+threshold 2.0×) and **2.55×** the registered 2,400/day saturation threshold.
+The 40,328 figure is the *30-day active matching universe*, not a daily rate;
+the daily rate is what binds capacity.
+
+Arithmetic, at the registered 2 calls per pool (T0+10d covers 1/3/7d, T0+33d
+covers 30d) and the measured 6.0 s pacing:
+
+| | registered expectation (1,330/day) | **measured (6,114.9/day)** |
+|---|---|---|
+| outcome checkpoint requests | 2,660/day | **12,230/day** |
+| + watcher sweeps | 2,880/day | 2,880/day |
+| **= total** | **5,540/day** | **15,110/day** |
+| vs pacing capacity 14,400/day | fits, 61.5% margin | **does not fit — short by 710/day (4.9% over)** |
+| vs registered ledger cap 10,000/day | fits | **exceeds by 5,110/day (151% of cap)** |
+
+**It does not fit.** The shortfall is 710 requests/day against raw pacing
+capacity, and 5,110/day against the self-imposed cap that binds first.
+
+**The options, reported without choosing one**, because any universe
+restriction is a registration change and belongs in an amendment rather than an
+implementation: (a) raise the ledger cap toward the 14,400 pacing ceiling — the
+smallest change, and still 710/day short at the measured rate; (b) reduce
+pacing below 6.0 s — but 6.0 s is a *measured* limit (solclear recorded HTTP
+429 at 2.5 s) and lowering it needs new measurement, not assumption; (c)
+restrict the universe (a venue subset, a liquidity floor, a sampling rule) —
+each starts a new cohort; (d) reduce checkpoints per pool — but both are load
+bearing for registered horizons.
+
+**The registered rule is to report rather than sample, and it stands until
+amended.** The watcher continues to report saturation and the checkpointer will
+refuse at the cap rather than silently sampling or dropping. Nothing was
+changed here.
+
+### Maturity dates — unchanged
+
+**2026-08-27** (7-day analysis), **2026-09-19** (30-day).
+
+---
+
 ## Amendment 3 — the death-floor specification gap closed — 2026-08-17
 
 *ETAs (25–30 / 10–15 / 10–15 / 30–40 / 20–25 min) held. `make lint`,

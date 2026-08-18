@@ -822,3 +822,74 @@ side by side is a statement about sensitivity to a specification choice, not a
 menu. A future session that reports `carry_forward` as the result has violated
 this registration, and `tests/test_registration.py` pins the grid size, the
 Šidák level and this constraint's text against exactly that.
+
+### Amendment 4 — 2026-08-18 — pre-collection rows are excluded from the attention metric
+
+**What data existed when this amendment was made.** **No cohort outcome
+existed and none was read, fetched or inspected.** `data/outcomes/` held
+exactly one file, `benchmark-sol.jsonl` (the SOL benchmark leg — no cohort
+pool), and zero `candles-*.jsonl`; the first checkpoint fires **2026-08-26**,
+eight days out. Attention rows existed and were counted for this amendment:
+**150,591 stored mentions** (telegram 127,286 · bluesky 19,878 · farcaster
+3,427). Enumeration data was read (37,333 cohort mints with a birth
+timestamp). No return, price or outcome informed this text.
+
+**The fact that prompted it.** Telegram's first MTProto connect **backfilled
+123,225 rows posted before collection began**, the oldest dating to
+**2022-01-06**. MTProto serves channel *history* on connect; the firehoses do
+not. Bluesky contributed **0** pre-collection rows and Farcaster **14**.
+
+**What was measured, before deciding anything.** The attention windows use
+**`posted_at`**, read from the code rather than assumed
+(`attention/metrics.py`: `posted = parse_iso(mention.posted_at)`;
+`offset = posted - born_at`; `if offset < timedelta(0): continue`). The
+contamination surface was then measured directly by applying the registered
+window rule to every stored row against its matched mint's manifest birth:
+
+| | rows |
+|---|---|
+| pre-collection rows attributed to a cohort pool | **27,577** (mint 945 · cashtag 11,251 · name 15,381) |
+| of those, landing inside a registered `[T0, T0+24h]` window | **0** |
+| live-collected rows landing inside a window (for scale) | 7,672 |
+
+**The metric was never contaminated.** Every pre-collection row predates the
+`T0` of every pool it matched, so the existing `offset < 0` guard already
+excluded all of them. The 945 mint-exact pre-collection matches are not an
+anomaly: a token's **mint predates its AMM pool**, so a genuine mention of the
+token can precede the pool birth this registration anchors on.
+
+**The rule, registered anyway and deliberately.** Per this registration's own
+discipline — an implementation accident is not a rule — **a mention whose
+`posted_at` precedes its source's collection start is excluded from the
+attention metric**, explicitly, whether or not the window arithmetic would have
+excluded it. The registered ground: **the construct is forward attention
+velocity during the launch window.** A message retrieved from history was not
+*observed as it happened*; it is a different instrument, available deeply for
+Telegram, not at all for the firehoses, and therefore available unevenly across
+sources and across pools. Uniform exclusion keeps every pool measured by the
+same instrument.
+
+**The registered collection starts, measured** (first `ingested_at` per source):
+
+| source | collection start | pre-collection rows excluded |
+|---|---|---|
+| telegram | `2026-08-17T04:28:21Z` | **123,225** |
+| bluesky | `2026-08-16T16:30:23Z` | **0** |
+| farcaster | `2026-08-16T16:29:50Z` | **14** |
+
+A source with **no** registered start excludes nothing, so adding a source
+later cannot silently drop its rows.
+
+**The registered consequence, stated rather than hidden.** A pool whose
+`[T0, T0+24h]` window **opens before a source's collection start** receives
+only partial coverage from that source. This affects pools born in the first
+minutes of the cohort and, for Telegram, pools born before
+`2026-08-17T04:28:21Z`. The gap is **left visible rather than filled from
+backfill**, because filling it would measure those pools with the historical
+instrument and every later pool with the live one. Its direction is toward the
+null for the affected pools (attention undercounted), consistent with
+Amendment 2's under-detection caveat.
+
+**No bar moves.** The grid stays at **160** cells with **α_adj = 0.000321**,
+the horizons, death floor, cost band, matching rules, channel list and
+statistics are untouched, and this amendment adds no trial.

@@ -16,7 +16,9 @@ from solattn.attention.metrics import (
 from solattn.clock import iso
 from solattn.records import Mention
 
-BORN = datetime(2026, 8, 16, 0, 0, tzinfo=UTC)
+# After every source's registered collection start, so the Amendment 4
+# exclusion does not fire on fixtures that are about something else.
+BORN = datetime(2026, 8, 18, 0, 0, tzinfo=UTC)
 MINT = "Mint1111111111111111111111111111111111111111"
 
 
@@ -120,3 +122,74 @@ def test_unregistered_statistic_raises_rather_than_silently_growing_the_grid() -
 
     with pytest.raises(KeyError, match="trial grid may not grow"):
         stat("m", 1).statistic("v12")
+
+
+# --- Amendment 4: pre-collection rows are excluded -------------------------
+
+PRE_START_BORN = datetime(2026, 8, 16, 20, 0, tzinfo=UTC)  # before telegram's start
+
+
+def telegram_mention(posted: datetime, author: str = "a") -> Mention:
+    return Mention(
+        source=registry.SOURCE_TELEGRAM,
+        channel="memecoinx",
+        message_id=f"m-{posted.isoformat()}",
+        author_id=author,
+        posted_at=iso(posted),
+        match_kind=registry.MATCH_MINT,
+        matched_mint=MINT,
+        candidates=1,
+        conflict=False,
+        ingested_at="2026-08-17T04:28:21Z",
+    )
+
+
+def test_pre_collection_rows_are_excluded_from_the_metric() -> None:
+    """Amendment 4: history-retrieved rows are not forward attention."""
+    from solattn.attention.metrics import is_pre_collection
+
+    # inside the pool's window, but posted before telegram collection started
+    backfilled = telegram_mention(PRE_START_BORN + timedelta(hours=1))
+    assert is_pre_collection(backfilled) is True
+    stats = compute_stats(MINT, PRE_START_BORN, [backfilled])
+    assert stats.mentions_24h == 0
+    assert stats.v24 == 0.0
+
+
+def test_rows_posted_after_collection_start_still_count() -> None:
+    from solattn.attention.metrics import is_pre_collection
+
+    live = telegram_mention(datetime(2026, 8, 17, 5, 0, tzinfo=UTC))
+    assert is_pre_collection(live) is False
+    born = datetime(2026, 8, 17, 4, 30, tzinfo=UTC)
+    assert compute_stats(MINT, born, [live]).mentions_24h == 1
+
+
+def test_a_window_straddling_a_collection_start_keeps_only_the_live_part() -> None:
+    """A registered consequence: pools whose window opens before a source began
+    get partial coverage from that source. The rule is uniform, so the gap is
+    visible rather than silently filled from backfill."""
+    before = telegram_mention(datetime(2026, 8, 17, 3, 0, tzinfo=UTC), "a")
+    after = telegram_mention(datetime(2026, 8, 17, 6, 0, tzinfo=UTC), "b")
+    stats = compute_stats(MINT, PRE_START_BORN, [before, after])
+    assert stats.mentions_24h == 1  # only the post-start row counts
+    assert stats.authors_24h == 1
+
+
+def test_a_source_without_a_registered_start_excludes_nothing() -> None:
+    """Adding a source must not silently drop its rows."""
+    from solattn.attention.metrics import is_pre_collection
+
+    unknown = Mention(
+        source="some_new_source",
+        channel="c",
+        message_id="1",
+        author_id="a",
+        posted_at="2001-01-01T00:00:00Z",
+        match_kind=registry.MATCH_MINT,
+        matched_mint=MINT,
+        candidates=1,
+        conflict=False,
+        ingested_at="2026-08-17T00:00:00Z",
+    )
+    assert is_pre_collection(unknown) is False
