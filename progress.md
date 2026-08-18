@@ -85,6 +85,390 @@ compressed: it completes one full UTC day after the collectors start.
 
 ---
 
+## Stage A.5 — the enumeration miss rate measured, the real choice sized — 2026-08-18
+
+*ETAs (30–40 / 10–15 / 20–30 / 20–30 min) held; Task 4 was re-quoted down to
+15–20 min once the gates were measured at **0.54 s** for all three rather than
+guessed. `make lint`, `make typecheck`, `make test` green (**114 tests**). **No
+cohort outcome was read, fetched or inspected**: `data/outcomes/` still holds
+only `benchmark-sol.jsonl`, and the first checkpoint fires 2026-08-26.*
+
+**Nothing registered changed in this stage.** No rule was edited, no denylist
+member added, no cap moved, no ADR appended. This stage measures and reports;
+the amendment follows separately, once the operator chooses.
+
+All figures below come from **one frozen snapshot taken 2026-08-18T04:49:43Z**
+(55,715 birth rows, 2,459 lifecycle rows, 38,742 ledger rows), because the
+manifests are being appended to live and two reads minutes apart do not agree.
+
+### The inputs in the prompt, corrected against the data
+
+Three of the figures this stage was handed are raw line counts rather than
+births, and the difference changes the capacity arithmetic.
+
+| quantity | as stated | measured, deduplicated | why |
+|---|---|---|---|
+| births manifested 2026-08-17 | 36,049 | **27,106** | 8,943 rows are duplicates |
+| launchpad | 28,260 | **21,199** | |
+| **amm — the rate that binds capacity** | 7,789/day | **5,907/day** | |
+| watcher heartbeats | 890 | **887 unique** (898 raw) | |
+| sweeps with `new_births == pools_seen` | 405 | **401 of 884** usable pairs = **45.4%** | restart-spanning pairs excluded |
+
+`manifest.read_day` deduplicates by pool on read, so **no analysis path was
+ever affected** — `day_counts`, the saturation check and the matching universe
+have always seen 27,106, not 36,049. Only a raw `wc -l` sees the larger number.
+
+**Where the duplicate rows come from, measured:** all 14,773 of them separate
+by **1–30 s**, never by a sweep interval. They are not repeat sightings across
+sweeps. They are the same pool returned on two adjacent pages of **one** walk,
+because the feed advances during the 18 s it takes to read 4 pages at the
+registered 6.0 s spacing. This is a property of paging a newest-first feed, and
+it is the reason a 4-page sweep does not read 80 pools.
+
+### Task 1 — the enumeration miss rate
+
+**The overlap test, run mechanically on the feed's own ordering.** `sweep_once`
+keeps a cursor at the newest `pool_created_at` already written and treats as
+fresh only what is strictly newer. So `new_births == pools_seen` is a
+*proof*, not an inference, that every slot read was created after the previous
+sweep's newest — that the two reads did not overlap, and that the interval
+between them was never read.
+
+| overlap (pools of 80 re-seen from the previous sweep) | sweeps | share |
+|---|---:|---:|
+| **0 — no overlap, window advanced past the read** | **401** | **45.4%** |
+| 1–4 | 35 | 4.0% |
+| 5–9 | 40 | 4.5% |
+| 10–19 | 84 | 9.5% |
+| 20–39 | 163 | 18.4% |
+| 40–59 | 92 | 10.4% |
+| 60–79 | 23 | 2.6% |
+| 80 — feed did not advance at all | 46 | 5.2% |
+
+n = 884 consecutive sweep pairs; measured sweep interval **median 141 s**
+(min 44, p90 144, max 152), against the registered 120 s sleep plus ~21 s of
+paced work.
+
+**A live probe refuted the assumption the estimate was about to rest on.** The
+natural claim is that paging a newest-first feed can only *duplicate* across
+pages, never *skip*, because new rows are inserted at the head and push
+everything back. Measured instead (2026-08-18T04:50Z, 4 ledgered requests):
+pages 1–2 shared 16 pools, but **page 2 → page 3 left a 13-second hole**. The
+feed skips across pages as well as duplicating. Coverage is therefore computed
+from **per-page** windows, not per-sweep windows — a per-sweep window would
+have spanned that hole silently and understated the miss.
+
+**Coverage, unioning the read windows before summing** (`intervals.merge_windows`,
+the standing practice — 3,009 page-reads across 5 continuous watcher runs):
+
+| | |
+|---|---|
+| feed time elapsed inside the runs | **34.50 h** |
+| feed time actually read (union) | **24.28 h** |
+| **coverage** | **70.4%** |
+| **never read** | **29.6%** (10.21 h, in 1,290 proven-uncovered gaps) |
+
+Gap lengths: p10 2 s, **p50 10 s**, p90 65 s, max 667 s.
+
+**Births never enumerated — bounded by two independent routes.** The rate
+inside each gap is estimated from the feed's own measured rate in the page
+windows that bracket it, at that moment; never from a daily average.
+
+| route | true full-feed rate | miss rate |
+|---|---:|---:|
+| **A** — integrate each proven gap at the locally measured rate | 43,497/day | **34.7%** |
+| **B** — the feed's own in-window rate, time-weighted (independent of any gap model) | 39,326/day | **27.8%** |
+| enumerated, for comparison | 28,385/day | — |
+
+The two routes agree within **10.6%**. **The miss rate is 28–35%**, and it is a
+**lower bound on both routes**: route B measures the rate only during covered
+time, and covered time is biased toward quiet periods (see below), so it
+understates the true rate; route A prices gaps from adjacent windows, which are
+by construction slower than the gaps themselves.
+
+**≈ 21,700 births were never enumerated over 34.5 h, of which ≈ 4,000 were
+`amm`.** Of the missed births, **75.4% fall in gaps between sweeps and 24.6%
+in holes between pages of a single sweep** — so even an infinitely fast sweep
+cadence would leave a quarter of the miss in place.
+
+#### The misses are not uniform thinning, and that is the damaging part
+
+**By time of day** — the miss rate spans **8.7% at 07:00 UTC to 65.0% at
+16:00 UTC, a 56-point spread and a 7.4× ratio**:
+
+| UTC h | enumerated | est. missed | miss rate |
+|---:|---:|---:|---:|
+| 07 | 952 | 91 | **8.7%** ← quietest |
+| 12 | 1,156 | 699 | 37.7% |
+| 15 | 1,153 | 1,319 | 53.4% |
+| **16** | 1,445 | 2,684 | **65.0%** ← busiest |
+| 21 | 2,126 | 2,236 | 51.3% |
+| 00 | 2,255 | 1,069 | 32.2% |
+
+**By burst intensity** — gaps split into quintiles by the feed rate measured at
+the gap:
+
+| quintile | gaps | feed rate | est. missed | share of all misses |
+|---|---:|---:|---:|---:|
+| Q1 slowest | 259 | 29,077/day | 1,182 | 5.4% |
+| Q2 | 258 | 37,023/day | 2,087 | 9.6% |
+| Q3 | 257 | 44,941/day | 3,841 | 17.7% |
+| Q4 | 258 | 51,967/day | 4,794 | 22.1% |
+| **Q5 fastest** | 258 | 62,666/day | **9,817** | **45.2%** |
+
+**The fastest quintile carries 8.3× the missed births of the slowest, on the
+same number of gaps.** A pool born during a burst is systematically less likely
+to be enumerated than one born in a lull.
+
+**This is the exact shape solclear measured the cost of.** The registration's
+central claim is that membership is decided by birth and by nothing else, and
+that attention never touches enumeration. A 28–35% miss that concentrates
+8.3× in high-birth-rate periods is not attention-driven selection, but it is
+*correlated with the same latent variable attention is* — market-wide activity
+bursts. Uniform 30% thinning would cost power and nothing else. This is not
+uniform, and it damages the birth-ordered claim in a way that has to be
+reported with every result rather than discovered afterward.
+
+#### The duplicate heartbeat entries
+
+**12 duplicated rows, all at or after 2026-08-18T04:20:58Z** — 898 raw
+heartbeats, 887 distinct, each duplicate appearing exactly twice with a zero
+interval and byte-identical payload. **It is not a logging bug. Two watcher
+processes are running.** The lifecycle log carries two `start` markers four
+seconds apart (04:20:35Z and 04:20:39Z), and the process table confirms it:
+
+- `solattn-watch.service` (PID 82464) — the systemd unit ADR-014 installed
+- `uv run python -m solattn.cli watch` (PID 82127) — the legacy
+  `scripts/run_collectors.sh` shell loop, which A.4 recorded as "no longer the
+  production mechanism" but never stopped
+
+Two `collect` loops are running for the same reason. The ledger shows the
+doubling directly: paired page=1/page=2 requests at identical seconds.
+
+**Scope of the double-counting, stated precisely: it affects the last 12
+sweeps only, not the whole log.** Every per-sweep statistic in this entry was
+computed on the 887 *distinct* heartbeats. Manifest counts are unaffected —
+`read_day` deduplicates by pool. The real costs are that the watcher now spends
+**2× its request budget** and that the effective spacing against the source has
+halved to ~3 s.
+
+#### A latent defect the probe exposed, which has not yet fired
+
+At ~3 s effective spacing the source returns **HTTP 429** (measured: 2 of 10
+requests, `"You've exceeded the Rate Limit"`). `geckoterminal.fetch_new_pools`
+returns `[]` on any non-2xx, and `sweep_once` reads `if not births: break` —
+so **a 429 becomes "the feed ended here" and the sweep silently stops early,
+with no refusal marker and no error marker.** That is the same absent-data
+versus measured-absence shape ADR-012 fixed on the OHLCV path in A.3, still
+live on the enumeration path. The ledger cannot detect it either: it charges
+before sending and never records the status.
+
+**It has not fired in the collected data.** All **887 of 887** sweeps recorded
+`pages_read = 4` and `pools_seen = 80`; zero truncated sweeps, zero pool-slots
+lost. The 429s were provoked by the probe adding a third client. The defect is
+latent, and the duplicate watcher is what makes it likely to fire.
+
+#### Two further measured facts
+
+- **The feed lags wall clock, and the lag is growing**: median **1.2 min**
+  (2026-08-16) → **1.6 min** (08-17) → **6.8 min** (08-18), with the last sweep
+  at **10.3 min**. Nothing registered depends on this, but a lag that grows
+  toward the 14-day death-floor lookback would.
+- **The feed refreshes in batches**: page 1 was byte-identical across **51 s**
+  of 6 s polling, then advanced by 10 pools at once. Measured once only
+  (**n = 1 change in 103 s**) — thin, and it is the single largest source of
+  spread in Task 2.
+
+### Task 2 — what complete enumeration would cost
+
+**Packing efficiency, measured by page depth** on the 410 zero-overlap sweeps
+(where all 80 slots were written, so the cursor truncated nothing):
+
+| pages/sweep | slots | distinct pools | efficiency | **pools per request** |
+|---:|---:|---:|---:|---:|
+| 1 | 20 | 20.0 | 100% | **20.04** |
+| 2 | 40 | 34.7 | 86.8% | 17.37 |
+| 3 | 60 | 46.0 | 76.7% | 15.35 |
+| **4 — as registered** | 80 | **57.4** | **71.8%** | **14.35** |
+
+**The registered 4-page sweep spends 28% of its requests on pools it has
+already read in the same sweep.** Depth is bought at a falling rate: each page
+past the first adds only ~11.4 new pools, not 20.
+
+**Measured full-feed birth rate** (from each sweep's own window, n = 840):
+p50 0.424/s (36,610/day), p95 0.717/s (61,947/day), **p99 0.952/s
+(82,286/day)**, max 1.800/s. Busiest UTC hour h16 sustains 0.586/s
+(50,654/day); quietest h07 0.272/s.
+
+**The condition for guaranteed overlap.** With `P` pages, cycle `C` seconds,
+efficiency `η(P)`, peak rate `R` and safety margin `M`:
+
+```
+20·P·η(P)  ≥  M · R · C          and     C ≥ 6.0·P   (the measured pacing floor)
+⇒  requests/day = 86400·M·R / (20·η(P))     — independent of P at the boundary
+```
+
+At **M = 2.0** and **R = p99 = 0.952 pools/s**:
+
+| pages P | η(P) | sweep interval C | C ≥ 6P? | **requests/day** | vs 14,400 pacing |
+|---:|---:|---:|---|---:|---:|
+| 1 | 100% | 10.5 s | yes | **8,211** | 57% |
+| **2** | 86.8% | **18.2 s** | yes | **9,477** | 66% |
+| 4 (as registered) | 71.8% | 30.1 s | yes | 11,466 | 80% |
+
+**Registered budget for complete enumeration: 2 pages per sweep every 18 s →
+9,477 requests/day**, at a 2.0× margin over the p99 instantaneous birth rate.
+P = 1 at 8,211/day is the theoretical floor but leaves no depth margin against
+a single dropped page.
+
+**The batching caveat, stated because it drives the spread.** If the feed
+really does publish in ~55 s batches, then the page-set must be deep enough to
+hold one whole batch no matter how often it is polled: `M·R·T_refresh` =
+2 × 0.952 × 55 ≈ **105 pools**, which needs ~9 pages (extrapolating the
+measured +11.4 pools/page), i.e. **14,138 requests/day**. The refresh
+measurement is one observation. **Before committing to a cadence, run a longer
+refresh probe** — that single number moves the watcher budget from 9,477 to
+14,138/day.
+
+**So complete enumeration costs 9,500–14,100 watcher requests/day**, against
+2,434/day measured today.
+
+### Task 3 — the alternatives, priced, not chosen
+
+**GeckoTerminal / CoinGecko tiers, retrieved 2026-08-18** from
+`coingecko.com/en/api/pricing` and `docs.coingecko.com/reference/endpoint-overview`:
+
+| tier | price | credits | per day / rate limit | pool OHLCV? |
+|---|---|---|---|---|
+| Public keyless GeckoTerminal | $0 | — | **14,400/day** @ 6.0 s *measured* (docs say 30/min; the marketing page says 10/min) | yes |
+| Demo (keyed) | $0 | 10k/mo | 329/day, 100/min | yes |
+| Basic | $35/mo ($29 yearly) | 100k/mo | 3,288/day, 300/min | **NO** |
+| Analyst | $129/mo ($103.20 yearly) | 500k/mo | 16,438/day, 500/min | yes |
+| **Lite** | **$499/mo ($399.20 yearly)** | 2m/mo | **65,753/day**, 500/min | yes |
+| Enterprise | custom | custom | custom | yes |
+
+**Basic carries `/onchain/networks/{network}/new_pools` but not the pool OHLCV
+endpoint** (Analyst and above), so it cannot serve the outcome path at any
+volume — it is not a candidate regardless of price.
+
+**Completing enumeration raises the checkpoint load, because it exposes the
+births that were being missed.** At the 28–35% miss rate the true `amm` rate is
+**8,181–8,671/day** (central 8,426) against 5,907/day enumerated.
+
+| option | watcher | checkpoints | **total/day** | vs 14,400 pacing | vs 10,000 cap |
+|---|---:|---:|---:|---|---|
+| **A. pay for a tier** — universe unchanged | 9,477 | 16,853 | **26,330** | over by 11,930 | over by 16,330 |
+| A′. …if the feed batches (~55 s) | 14,138 | 16,853 | **30,991** | over by 16,591 | over by 20,991 |
+| **B. + `meteora-dbc` → launchpad denylist** | 9,477 | 12,867 | **22,344** | over by 7,944 | over by 12,344 |
+| **C. restrict universe** (pumpswap only) | 9,477 | 6,040 | **15,517** | over by 1,117 | over by 5,517 |
+| **D. accept incomplete enumeration** (today's watcher) | 2,434 | 11,814 | **14,248** | **fits**, 1% margin | over by 4,248 |
+| D′. …as actually running now, two watchers | 4,868 | 11,814 | **16,682** | over by 2,282 | over by 6,682 |
+| B′. D + `meteora-dbc` reclassified | 2,434 | 9,020 | **11,454** | **fits** | over by 1,454 |
+| C′. D + pumpswap only | 2,434 | 4,234 | **6,668** | **fits** | **fits** |
+
+**Which tiers clear the combined budget:** against option A's **26,330/day**,
+only **Lite ($499/mo, $399.20 billed yearly)** clears it, with 60% headroom.
+**Analyst at 16,438/day does not** — it is 61% short, and it does not clear
+option B (22,344) either. Analyst does clear **C** (15,517) and every
+D-variant. The 500/min rate limit is not binding at any of these volumes.
+
+**What each option costs methodologically:**
+
+- **A — pay.** Methodological cost **zero**: no registered rule moves, the
+  universe is unchanged, and it is the only option that removes the
+  non-random miss rather than documenting it. Cost is $499/mo and real
+  engineering: a keyed base URL (`pro-api.coingecko.com/api/v3/onchain/…`), a
+  new secret in `.env`, a re-run of `docs/ACCESS.md` verification, and a
+  known-answer test that the paid path reproduces the keyless path's answers
+  before its output is believed.
+- **B — reclassify `meteora-dbc`.** Removes 1,397/day (23.6%) from the primary
+  universe. Does not fit anything by itself, and does not address the miss.
+- **C — restrict the universe.** Fits, and is the only option that fits the
+  registered cap without payment — but it discards 64% of the primary universe
+  and starts a new cohort. A *liquidity* rule rather than a venue rule is worse
+  on capacity, not better: `PoolBirth` stores no reserve figure, so a liquidity
+  floor needs an extra call per pool at birth (+8,400/day) before it can filter
+  anything.
+- **D — accept documented incomplete enumeration.** Costs nothing and fits
+  pacing with a 1% margin, but the documentation it requires is the finding
+  above: *28–35% of births are never enumerated, and the miss is 7.4× heavier
+  at 16:00 UTC than at 07:00 and 8.3× heavier in the fastest birth-rate
+  quintile than in the slowest.* Every result would carry that, at every
+  horizon, alongside the survivorship audit §5 already requires. **Note that D
+  as currently running (D′) does not fit** — the duplicate watcher must be
+  stopped for D to be the option it claims to be.
+
+**None of A, A′, B or C fits the registered 10,000/day ledger cap.** Only C′
+does. The cap binds before pacing does in every complete-enumeration option.
+
+#### `meteora-dbc`: correction, or change to the registered rule?
+
+**Stated plainly: adding `meteora-dbc` to Section 1's denylist is a change to
+the registered rule, and it applies the registered intent. Both are true, and
+the registration already decided which governs.**
+
+- **As written, it is a change.** Section 1 defines `launchpad` as membership
+  in an *enumerated set* of 16 dex ids. `meteora-dbc` is not among them. The
+  rule is the literal list, and adding a member alters it.
+- **As intended, it is a correction.** Section 1 says the set is "a **denylist
+  of bonding-curve venues**, not an allowlist of AMMs". `meteora-dbc` is
+  Meteora's Dynamic Bonding Curve — a bonding-curve launch venue, squarely the
+  class the denylist names. It is absent because it was not observed when the
+  registration was written on 2026-08-16, not because it was considered and
+  excluded.
+- **The registration pre-decided the conflict.** Section 1's check rule: "A
+  disagreement does not authorize editing the denylist mid-collection; it
+  authorizes an **amendment that starts a new cohort**." So it goes through a
+  dated amendment, not a quiet edit — which is the whole point of rule 2.
+
+**And the amendment costs no data, in either direction.** The tag is applied
+**at analysis, not at collection**: every `PoolBirth` stores its raw `dex`
+string, and `classify_venue` is a pure function over it. Both classifications
+remain computable for every pool already enumerated and every pool enumerated
+hereafter. The choice decides **which tag is the pre-registered primary**, not
+what is kept. A reclassification can therefore also be reported as a
+*robustness split* — the result both ways, with its n — exactly as Amendment 3
+handled the death-floor alternative, without any cohort being restarted.
+
+For scale, the complete-day `amm` venue mix (2026-08-17, n = 5,907):
+pumpswap 2,117 (35.8%), meteora-damm-v2 1,667 (28.2%), **meteora-dbc 1,397
+(23.6%)**, orca 325 (5.5%), meteora 106, fluxbeam 105, bags-fm 85, raydium 59,
+raydium-clmm 40, then a tail of 6. For contrast the `launchpad` subset is
+99.4% pump-fun.
+
+### The registered rules stand unchanged, and the choice is the operator's
+
+No rule was edited in this stage. Section 1's denylist is as registered,
+Section 7's caps and pacing are as registered, and the watcher still reports
+saturation rather than sampling. No ADR was appended, because no decision was
+taken.
+
+**Four things are the operator's to decide**, and only the first is urgent:
+
+1. **Stop the duplicate watcher and collect loops** — `scripts/run_collectors.sh`
+   is running alongside the systemd units, doubling the request budget and
+   halving the effective spacing against the source. Not a registered rule;
+   ADR-014 already made systemd the production mechanism. *Not done here
+   because this stage was scoped to measure and report.*
+2. **Whether to pay, reclassify, restrict, or document** — the table above.
+3. **Whether to fix the 429-swallowing path** in `fetch_new_pools` /
+   `sweep_once`, which is a defect and not a rule.
+4. **Whether to run a longer feed-refresh probe** before fixing a cadence, since
+   that one measurement moves the watcher budget by 4,700 requests/day.
+
+**The deadline is the 2026-08-26 first checkpoint.** It is set by the calendar,
+not by effort, and cannot be compressed: it is `T0 + 10 d` for the first
+birth-day cohort. Whatever is chosen has to be in place before the outcome path
+starts drawing on the same budget, because from that date the checkpoint load
+(11,814/day at today's enumerated rate, 16,853/day at the true rate) lands on
+top of the watcher's.
+
+### Maturity dates — unchanged
+
+**2026-08-27** (7-day analysis), **2026-09-19** (30-day).
+
+---
+
 ## Stage A.4 — persistence, the backfill resolved, the saturation sized — 2026-08-18
 
 *ETAs (25–35 / 35–45 / 10–15 / 20–25 min) held. `make lint`, `make typecheck`,
